@@ -481,7 +481,7 @@ function AppContent() {
               </div>
 
               <div>
-                <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight leading-none mb-3">
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-none mb-3">
                   <span className="hero-vox">Vox</span>
                   <span className="hero-fore">Forensics</span>
                 </h1>
@@ -490,7 +490,7 @@ function AppContent() {
                 </h2>
               </div>
 
-              <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
+              <p className="text-lg md:text-xl font-bold text-white leading-snug drop-shadow-md">
                 Is that voice <span className="text-[#00ff88]">real</span>, or <span className="text-[#a855f7]">AI-generated</span>?
                 <span className="typing-cursor ml-1">|</span>
               </p>
