@@ -413,8 +413,8 @@ function AppContent() {
       <nav className="border-b border-[#1a2a4a]/50 bg-[#050914]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00d4ff] to-[#a855f7] flex items-center justify-center">
-              <i className="fa-solid fa-wave-square text-[#050914] text-sm"></i>
+            <div className="w-9 h-9 rounded-full bg-[#060d1f] border border-[#00d4ff]/50 flex items-center justify-center shadow-[0_0_14px_rgba(0,212,255,0.35)]">
+              <i className="fa-solid fa-wave-square text-[#00d4ff] text-sm"></i>
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white leading-tight">VoxForensics</h1>
@@ -422,22 +422,31 @@ function AppContent() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-1 bg-[#0a1128]/50 border border-[#1a2a4a] rounded-full px-1 py-1">
+          <div className="hidden md:flex items-center gap-1">
             {(['home', 'scanner', 'batch', 'history', 'about'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 ${
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 border ${
                   activeTab === tab
-                    ? 'text-white bg-[#1a2a4a]/50'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'text-white bg-[#0d1830]/90 border-[#23406e] shadow-[0_0_12px_rgba(0,212,255,0.12)]'
+                    : 'text-gray-400 hover:text-white border-transparent'
                 }`}
               >
-                {tab === 'home' && <><i className="fa-solid fa-house text-xs text-[#00d4ff]"></i> Home</>}
-                {tab === 'scanner' && <><i className="fa-solid fa-expand text-xs"></i> Scanner</>}
-                {tab === 'batch' && <><i className="fa-solid fa-layer-group text-xs"></i> Batch</>}
-                {tab === 'history' && <><i className="fa-solid fa-clock-rotate-left text-xs"></i> History</>}
-                {tab === 'about' && <><i className="fa-solid fa-circle-info text-xs"></i> About</>}
+                <i
+                  className={`text-xs ${
+                    tab === 'home'
+                      ? 'fa-solid fa-house'
+                      : tab === 'scanner'
+                        ? 'fa-solid fa-expand'
+                        : tab === 'batch'
+                          ? 'fa-solid fa-layer-group'
+                          : tab === 'history'
+                            ? 'fa-solid fa-clock-rotate-left'
+                            : 'fa-solid fa-circle-info'
+                  } ${activeTab === tab ? 'text-[#00d4ff]' : ''}`}
+                ></i>
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -454,6 +463,9 @@ function AppContent() {
                 </button>
               </>
             )}
+            <button className="w-9 h-9 rounded-full bg-[#0d1830]/80 border border-[#1e3a5f] flex items-center justify-center text-gray-300 hover:text-white transition">
+              <i className="fa-solid fa-moon text-sm"></i>
+            </button>
           </div>
         </div>
       </nav>
@@ -469,8 +481,9 @@ function AppContent() {
               </div>
 
               <div>
-                <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight text-gradient leading-none mb-2 drop-shadow-lg">
-                  VoxForensics
+                <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight leading-none mb-3">
+                  <span className="hero-vox">Vox</span>
+                  <span className="hero-fore">Forensics</span>
                 </h1>
                 <h2 className="text-sm md:text-base tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
                   Deepfake Audio Detector
@@ -479,6 +492,7 @@ function AppContent() {
 
               <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
                 Is that voice <span className="text-[#00ff88]">real</span>, or <span className="text-[#a855f7]">AI-generated</span>?
+                <span className="typing-cursor ml-1">|</span>
               </p>
 
               <p className="text-gray-300 text-sm leading-relaxed max-w-lg drop-shadow">
@@ -486,11 +500,17 @@ function AppContent() {
               </p>
 
               <div className="flex flex-wrap gap-4">
-                <button onClick={handleSampleReal} className="bg-gradient-to-r from-emerald-500/20 to-emerald-500/5 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,255,136,0.15)] backdrop-blur-sm">
-                  <i className="fa-solid fa-play text-xs"></i> Try sample: Real voice
+                <button onClick={handleSampleReal} className="bg-gradient-to-r from-emerald-400 to-teal-600 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(16,185,129,0.3)] hover:shadow-[0_0_32px_rgba(16,185,129,0.45)] hover:brightness-110">
+                  <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
+                    <i className="fa-solid fa-play text-[10px]"></i>
+                  </span>
+                  Try sample: Real voice
                 </button>
-                <button onClick={handleSampleFake} className="bg-gradient-to-r from-purple-500/20 to-purple-500/5 border border-purple-500/40 hover:border-purple-400 text-purple-300 font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] backdrop-blur-sm">
-                  <i className="fa-solid fa-robot text-xs"></i> Try sample: AI clone
+                <button onClick={handleSampleFake} className="bg-gradient-to-r from-violet-700 to-purple-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(168,85,247,0.3)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] hover:brightness-110">
+                  <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
+                    <i className="fa-solid fa-robot text-[11px]"></i>
+                  </span>
+                  Try sample: AI clone
                 </button>
               </div>
 
@@ -501,23 +521,23 @@ function AppContent() {
               <div className="pt-8 border-t border-[#1a2a4a]/50">
                 <p className="text-xs font-semibold tracking-widest text-gray-400 mb-4 uppercase drop-shadow">What you get in every scan</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="bg-[#0a1128]/60 border border-[#1a2a4a] p-4 rounded-xl backdrop-blur-sm">
+                  <div className="bg-emerald-500/[0.07] border border-emerald-500/30 p-4 rounded-xl backdrop-blur-sm hover:border-emerald-400/50 transition-colors">
                     <i className="fa-solid fa-shield-halved text-[#00ff88] text-lg mb-2"></i>
                     <h4 className="text-sm font-semibold text-white mb-1">Real vs Fake Verdict</h4>
                     <p className="text-[11px] text-gray-400 leading-relaxed">Probability score for both classes from the trained model.</p>
                   </div>
-                  <div className="bg-[#0a1128]/60 border border-[#1a2a4a] p-4 rounded-xl backdrop-blur-sm">
+                  <div className="bg-cyan-500/[0.07] border border-cyan-500/30 p-4 rounded-xl backdrop-blur-sm hover:border-cyan-400/50 transition-colors">
                     <i className="fa-solid fa-chart-simple text-[#00d4ff] text-lg mb-2"></i>
                     <h4 className="text-sm font-semibold text-white mb-1">Feature Evidence</h4>
                     <p className="text-[11px] text-gray-400 leading-relaxed">MFCC, pitch, spectral centroid, ZCR, chroma and more.</p>
                   </div>
-                  <div className="bg-[#0a1128]/60 border border-[#1a2a4a] p-4 rounded-xl backdrop-blur-sm">
+                  <div className="bg-purple-500/[0.07] border border-purple-500/30 p-4 rounded-xl backdrop-blur-sm hover:border-purple-400/50 transition-colors">
                     <i className="fa-solid fa-wave-square text-[#a855f7] text-lg mb-2"></i>
                     <h4 className="text-sm font-semibold text-white mb-1">Visual Proof</h4>
                     <p className="text-[11px] text-gray-400 leading-relaxed">Waveform, spectrogram, and model analysis.</p>
                   </div>
-                  <div className="bg-[#0a1128]/60 border border-[#1a2a4a] p-4 rounded-xl backdrop-blur-sm">
-                    <i className="fa-solid fa-brain text-yellow-500 text-lg mb-2"></i>
+                  <div className="bg-amber-500/[0.07] border border-amber-500/30 p-4 rounded-xl backdrop-blur-sm hover:border-amber-400/50 transition-colors">
+                    <i className="fa-solid fa-brain text-amber-400 text-lg mb-2"></i>
                     <h4 className="text-sm font-semibold text-white mb-1">Academic Prototype</h4>
                     <p className="text-[11px] text-gray-400 leading-relaxed">Built for research and learning. Not a definitive forensic tool.</p>
                   </div>
@@ -580,7 +600,7 @@ function AppContent() {
                     className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 flex-shrink-0 ${
                       isRecording
                         ? 'recording-pulse border-red-500 text-red-500'
-                        : 'border-[#1a2a4a] text-gray-400 hover:text-white hover:border-[#a855f7]'
+                        : 'border-[#a855f7]/70 text-[#d8b4fe] hover:text-white hover:border-[#a855f7] shadow-[0_0_16px_rgba(168,85,247,0.3)]'
                     }`}
                   >
                     <i className={`fa-solid ${isRecording ? 'fa-stop' : 'fa-microphone'} text-xl`}></i>
@@ -608,7 +628,7 @@ function AppContent() {
                   className={`w-full font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 ${
                     isRecording
                       ? 'bg-gradient-to-r from-red-500/80 to-red-500/80 hover:from-red-500 hover:to-red-500 text-white'
-                      : 'bg-gradient-to-r from-[#a855f7]/80 to-[#00d4ff]/80 hover:from-[#a855f7] hover:to-[#00d4ff] text-white shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                      : 'bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#22d3ee] text-white shadow-[0_0_20px_rgba(139,92,246,0.35)] hover:shadow-[0_0_28px_rgba(139,92,246,0.5)] hover:brightness-110'
                   }`}
                 >
                   <i className={`fa-solid ${isRecording ? 'fa-stop' : 'fa-circle'} text-xs`}></i>
@@ -808,6 +828,7 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-2">
             <span className="font-bold text-white">VoxForensics</span>
+            <span>BCA 3rd Year Project</span>
             <span>|</span>
             <span>AI Voice Deepfake Detection</span>
           </div>
