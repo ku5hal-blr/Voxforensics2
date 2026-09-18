@@ -481,7 +481,7 @@ function AppContent() {
               </div>
 
               <div>
-                <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight leading-none mb-2">
+                <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight leading-none mb-3">
                   <span className="hero-vox">Vox</span>
                   <span className="hero-fore">Forensics</span>
                 </h1>

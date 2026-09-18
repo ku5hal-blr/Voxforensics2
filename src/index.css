@@ -45,20 +45,32 @@ html, body, #root {
   background-clip: text;
 }
 
-/* Hero Title — "Vox" cyan, "Forensics" purple, glossy with glow */
+/* Hero Title — "Vox" cyan, "Forensics" purple:
+   glossy top-down gradient + stacked drop-shadows for a solid 3D bevel
+   extrusion, plus a soft neon glow */
 .hero-vox {
-  background: linear-gradient(180deg, #eafcff 0%, #a8ecff 28%, #4cc9f0 58%, #0096e0 100%);
+  background: linear-gradient(180deg, #f0feff 0%, #bdf3ff 22%, #67e8f9 45%, #22b8f0 72%, #0284c7 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.45)) drop-shadow(0 5px 16px rgba(0, 150, 224, 0.35));
+  filter:
+    drop-shadow(0 1px 0 #0e7490)
+    drop-shadow(0 2px 0 #0e7490)
+    drop-shadow(0 3px 0 #155e75)
+    drop-shadow(0 5px 7px rgba(2, 62, 94, 0.55))
+    drop-shadow(0 0 26px rgba(0, 212, 255, 0.45));
 }
 .hero-fore {
-  background: linear-gradient(180deg, #fdf3ff 0%, #ebcbff 28%, #c084fc 58%, #9333ea 100%);
+  background: linear-gradient(180deg, #fdf4ff 0%, #f0d5ff 22%, #d8b4fe 45%, #b06ef5 72%, #7e22ce 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.5)) drop-shadow(0 5px 16px rgba(147, 51, 234, 0.4));
+  filter:
+    drop-shadow(0 1px 0 #6b21a8)
+    drop-shadow(0 2px 0 #6b21a8)
+    drop-shadow(0 3px 0 #581c87)
+    drop-shadow(0 5px 7px rgba(46, 16, 101, 0.6))
+    drop-shadow(0 0 26px rgba(168, 85, 247, 0.5));
 }
 
 /* Blinking cursor after the tagline */
