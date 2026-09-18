@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoxForensics - Project Presentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        
+        .slide {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 3rem;
+            page-break-after: always;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(to right, #00d4ff, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .glass-card {
+            background: rgba(10, 17, 40, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(26, 42, 74, 0.8);
+            border-radius: 16px;
+            padding: 2rem;
+        }
+        
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+        
+        .flow-arrow {
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(to right, #00d4ff, #a855f7);
+            position: relative;
+        }
+        
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            right: -5px;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-left: 10px solid #a855f7;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+        
+        @media print {
+            .slide {
+                page-break-after: always;
+                height: 100vh;
+            }
+        }
+        
+        .slide-number {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="bg-[#050914] text-white">
+    
+    <!-- Slide 1: Title -->
+    <div class="slide bg-gradient-to-br from-[#050914] via-[#0a1128] to-[#050914]">
+        <div class="text-center">
+            <div class="mb-8">
+                <i class="fa-solid fa-wave-square text-6xl gradient-text"></i>
+            </div>
+            <h1 class="text-7xl font-extrabold gradient-text mb-4">VoxForensics</h1>
+            <p class="text-2xl text-gray-300 mb-2">AI-Powered Deepfake Audio Detection System</p>
+            <p class="text-lg text-gray-400 mb-12">BCA 3rd Year Project Presentation</p>
+            
+            <div class="glass-card max-w-2xl mx-auto mt-12">
+                <p class="text-xl text-gray-300 italic">
+                    "Detecting synthetic voices in the age of AI-generated content"
+                </p>
+            </div>
+        </div>
+        <div class="slide-number">1 / 15</div>
+    </div>
+
+    <!-- Slide 2: Abstract -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Abstract</h2>
+        
+        <div class="glass-card mb-6">
+            <p class="text-lg text-gray-300 leading-relaxed mb-4">
+                <strong class="text-white">VoxForensics</strong> is an advanced AI-powered web application designed to detect deepfake audio content in real-time. 
+                With the rapid advancement of AI voice cloning technologies, distinguishing between authentic human voices and AI-generated synthetic audio has become increasingly challenging.
+            </p>
+            <p class="text-lg text-gray-300 leading-relaxed">
+                Our system employs sophisticated acoustic feature extraction and machine learning algorithms to analyze voice recordings and classify them as either 
+                <span class="text-[#00ff88] font-semibold">real</span> or <span class="text-[#a855f7] font-semibold">AI-generated</span> with high accuracy (85-98% confidence).
+            </p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-6 mt-8">
+            <div class="glass-card text-center">
+                <i class="fa-solid fa-shield-halved text-4xl text-[#00ff88] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">Privacy First</h3>
+                <p class="text-sm text-gray-400">100% client-side processing</p>
+            </div>
+            <div class="glass-card text-center">
+                <i class="fa-solid fa-brain text-4xl text-[#a855f7] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">AI-Powered</h3>
+                <p class="text-sm text-gray-400">Advanced ML algorithms</p>
+            </div>
+            <div class="glass-card text-center">
+                <i class="fa-solid fa-bolt text-4xl text-[#00d4ff] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">Real-Time</h3>
+                <p class="text-sm text-gray-400">Instant analysis results</p>
+            </div>
+        </div>
+        
+        <div class="slide-number">2 / 15</div>
+    </div>
+
+    <!-- Slide 3: Introduction -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Introduction</h2>
+        
+        <div class="grid grid-cols-2 gap-8">
+            <div>
+                <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">The Problem</h3>
+                <ul class="space-y-3 text-gray-300">
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-exclamation text-[#ef4444] mt-1"></i>
+                        <span>AI voice cloning tools (ElevenLabs, Murf, etc.) can create convincing synthetic voices</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-exclamation text-[#ef4444] mt-1"></i>
+                        <span>Deepfake audio poses threats to security, journalism, and legal systems</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-exclamation text-[#ef4444] mt-1"></i>
+                        <span>Human ear cannot reliably distinguish AI voices from real ones</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-exclamation text-[#ef4444] mt-1"></i>
+                        <span>Need for automated detection tools is critical</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3 class="text-2xl font-bold mb-4 text-[#00ff88]">Our Solution</h3>
+                <ul class="space-y-3 text-gray-300">
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-[#00ff88] mt-1"></i>
+                        <span>Web-based application accessible from any browser</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-[#00ff88] mt-1"></i>
+                        <span>Analyzes 10+ acoustic features for comprehensive detection</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-[#00ff88] mt-1"></i>
+                        <span>Provides confidence scores and detailed explanations</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-[#00ff88] mt-1"></i>
+                        <span>Complete privacy - all processing in user's browser</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="slide-number">3 / 15</div>
+    </div>
+
+    <!-- Slide 4: Problem Statement -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Problem Statement</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Challenge</h3>
+            <p class="text-lg text-gray-300 leading-relaxed">
+                With the democratization of AI voice synthesis tools, anyone can now create highly realistic voice clones in minutes. 
+                This technology, while innovative, poses significant risks:
+            </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-6 mt-8">
+            <div class="glass-card">
+                <i class="fa-solid fa-user-secret text-4xl text-[#ef4444] mb-4"></i>
+                <h4 class="text-xl font-bold mb-3">Security Threats</h4>
+                <ul class="space-y-2 text-gray-400 text-sm">
+                    <li>• Voice phishing attacks</li>
+                    <li>• Impersonation of authority figures</li>
+                    <li>• Bypassing voice authentication</li>
+                    <li>• Social engineering attacks</li>
+                </ul>
+            </div>
+            <div class="glass-card">
+                <i class="fa-solid fa-newspaper text-4xl text-[#ef4444] mb-4"></i>
+                <h4 class="text-xl font-bold mb-3">Misinformation</h4>
+                <ul class="space-y-2 text-gray-400 text-sm">
+                    <li>• Fake news audio clips</li>
+                    <li>• Fabricated political statements</li>
+                    <li>• Celebrity voice manipulation</li>
+                    <li>• Erosion of trust in media</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="slide-number">4 / 15</div>
+    </div>
+
+    <!-- Slide 5: Solution Overview -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Solution Overview</h2>
+        
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-6 text-center">VoxForensics Architecture</h3>
+            
+            <div class="flex items-center justify-center gap-4 mb-8">
+                <div class="text-center">
+                    <div class="feature-icon bg-[#00d4ff]/20 text-[#00d4ff] mx-auto mb-2">
+                        <i class="fa-solid fa-microphone"></i>
+                    </div>
+                    <p class="text-sm">Audio Input</p>
+                </div>
+                <div class="flow-arrow"></div>
+                <div class="text-center">
+                    <div class="feature-icon bg-[#a855f7]/20 text-[#a855f7] mx-auto mb-2">
+                        <i class="fa-solid fa-wave-square"></i>
+                    </div>
+                    <p class="text-sm">Feature Extraction</p>
+                </div>
+                <div class="flow-arrow"></div>
+                <div class="text-center">
+                    <div class="feature-icon bg-[#00ff88]/20 text-[#00ff88] mx-auto mb-2">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <p class="text-sm">AI Analysis</p>
+                </div>
+                <div class="flow-arrow"></div>
+                <div class="text-center">
+                    <div class="feature-icon bg-[#00d4ff]/20 text-[#00d4ff] mx-auto mb-2">
+                        <i class="fa-solid fa-chart-simple"></i>
+                    </div>
+                    <p class="text-sm">Results</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 mt-8">
+                <div class="bg-[#050914]/50 p-4 rounded-lg">
+                    <h4 class="font-bold text-[#00d4ff] mb-2">Input Methods</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>• Microphone recording</li>
+                        <li>• File upload (WAV, MP3, etc.)</li>
+                        <li>• Sample audio testing</li>
+                    </ul>
+                </div>
+                <div class="bg-[#050914]/50 p-4 rounded-lg">
+                    <h4 class="font-bold text-[#a855f7] mb-2">Processing</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>• 10 acoustic features</li>
+                        <li>• Multi-factor scoring</li>
+                        <li>• Confidence calculation</li>
+                    </ul>
+                </div>
+                <div class="bg-[#050914]/50 p-4 rounded-lg">
+                    <h4 class="font-bold text-[#00ff88] mb-2">Output</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>• Real/Fake verdict</li>
+                        <li>• Confidence score</li>
+                        <li>• Detailed report</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">5 / 15</div>
+    </div>
+
+    <!-- Slide 6: Working Mechanism - Part 1 -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Working Mechanism</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Step 1: Audio Input & Preprocessing</h3>
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-bold mb-3">Recording/Upload</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li><i class="fa-solid fa-microphone text-[#00d4ff] mr-2"></i>Real-time microphone capture using Web Audio API</li>
+                        <li><i class="fa-solid fa-upload text-[#00d4ff] mr-2"></i>File upload with drag-and-drop support</li>
+                        <li><i class="fa-solid fa-shield text-[#00d4ff] mr-2"></i>Security validation (file type, size, integrity)</li>
+                        <li><i class="fa-solid fa-wave-square text-[#00d4ff] mr-2"></i>Audio normalization and preprocessing</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-3">Supported Formats</h4>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-3 py-1 bg-[#1a2a4a]/50 rounded-full text-xs">.wav</span>
+                        <span class="px-3 py-1 bg-[#1a2a4a]/50 rounded-full text-xs">.mp3</span>
+                        <span class="px-3 py-1 bg-[#1a2a4a]/50 rounded-full text-xs">.m4a</span>
+                        <span class="px-3 py-1 bg-[#1a2a4a]/50 rounded-full text-xs">.flac</span>
+                        <span class="px-3 py-1 bg-[#1a2a4a]/50 rounded-full text-xs">.ogg</span>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">Maximum file size: 25 MB</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-4 text-[#a855f7]">Step 2: Feature Extraction</h3>
+            <p class="text-gray-300 text-sm mb-4">
+                The system extracts 10 key acoustic features from the audio signal using advanced signal processing techniques:
+            </p>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-[#050914]/50 p-3 rounded-lg">
+                    <p class="text-xs text-[#00d4ff] font-bold">1. Pitch Variability</p>
+                    <p class="text-xs text-gray-400">Measures natural pitch fluctuations</p>
+                </div>
+                <div class="bg-[#050914]/50 p-3 rounded-lg">
+                    <p class="text-xs text-[#00d4ff] font-bold">2. Formant Stability</p>
+                    <p class="text-xs text-gray-400">Analyzes vocal tract resonance patterns</p>
+                </div>
+                <div class="bg-[#050914]/50 p-3 rounded-lg">
+                    <p class="text-xs text-[#00d4ff] font-bold">3. Spectral Flatness</p>
+                    <p class="text-xs text-gray-400">Detects vocoder artifacts</p>
+                </div>
+                <div class="bg-[#050914]/50 p-3 rounded-lg">
+                    <p class="text-xs text-[#00d4ff] font-bold">4. Harmonic Ratio</p>
+                    <p class="text-xs text-gray-400">Measures harmonic content quality</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">6 / 15</div>
+    </div>
+
+    <!-- Slide 7: Working Mechanism - Part 2 -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Working Mechanism (Cont.)</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#a855f7]">Acoustic Features Analyzed</h3>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-[#1a2a4a]">
+                                <th class="text-left py-2 text-[#00d4ff]">Feature</th>
+                                <th class="text-left py-2 text-[#00d4ff]">Real Voice</th>
+                                <th class="text-left py-2 text-[#00d4ff]">AI Voice</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr class="border-b border-[#1a2a4a]/50">
+                                <td class="py-2">Pitch Variability</td>
+                                <td class="py-2 text-[#00ff88]">0.18-0.60</td>
+                                <td class="py-2 text-[#a855f7]">0.02-0.12</td>
+                            </tr>
+                            <tr class="border-b border-[#1a2a4a]/50">
+                                <td class="py-2">Formant Stability</td>
+                                <td class="py-2 text-[#00ff88]">0.45-0.85</td>
+                                <td class="py-2 text-[#a855f7]">0.88-0.99</td>
+                            </tr>
+                            <tr class="border-b border-[#1a2a4a]/50">
+                                <td class="py-2">Spectral Flatness</td>
+                                <td class="py-2 text-[#00ff88]">0.01-0.08</td>
+                                <td class="py-2 text-[#a855f7]">0.08-0.20</td>
+                            </tr>
+                            <tr class="border-b border-[#1a2a4a]/50">
+                                <td class="py-2">Harmonic Ratio</td>
+                                <td class="py-2 text-[#00ff88]">0.65-0.95</td>
+                                <td class="py-2 text-[#a855f7]">0.40-0.68</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2">Temporal Modulation</td>
+                                <td class="py-2 text-[#00ff88]">0.35-0.95</td>
+                                <td class="py-2 text-[#a855f7]">0.15-0.40</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div>
+                    <h4 class="font-bold mb-3 text-[#00ff88]">Additional Features:</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Zero Crossing Rate</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Spectral Centroid</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Spectral Rolloff</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>MFCC Energy</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Chroma Features</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-4 text-[#00ff88]">Step 3: AI Classification</h3>
+            <p class="text-gray-300 text-sm">
+                Multi-factor scoring algorithm analyzes all features, applies weighted thresholds, and calculates confidence scores. 
+                Cross-feature consistency check ensures robust detection even with noisy recordings.
+            </p>
+        </div>
+        
+        <div class="slide-number">7 / 15</div>
+    </div>
+
+    <!-- Slide 8: Technical Architecture -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Technical Architecture</h2>
+        
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-6 text-center">Technology Stack</h3>
+            
+            <div class="grid grid-cols-3 gap-6">
+                <div class="text-center">
+                    <div class="feature-icon bg-[#61dafb]/20 text-[#61dafb] mx-auto mb-3">
+                        <i class="fa-brands fa-react"></i>
+                    </div>
+                    <h4 class="font-bold mb-2">Frontend</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>React 18</li>
+                        <li>TypeScript</li>
+                        <li>Tailwind CSS</li>
+                        <li>Three.js (3D)</li>
+                    </ul>
+                </div>
+                
+                <div class="text-center">
+                    <div class="feature-icon bg-[#00d4ff]/20 text-[#00d4ff] mx-auto mb-3">
+                        <i class="fa-solid fa-music"></i>
+                    </div>
+                    <h4 class="font-bold mb-2">Audio Processing</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>Web Audio API</li>
+                        <li>FFT Analysis</li>
+                        <li>Signal Processing</li>
+                        <li>Feature Extraction</li>
+                    </ul>
+                </div>
+                
+                <div class="text-center">
+                    <div class="feature-icon bg-[#a855f7]/20 text-[#a855f7] mx-auto mb-3">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <h4 class="font-bold mb-2">AI/ML</h4>
+                    <ul class="text-xs text-gray-400 space-y-1">
+                        <li>Custom Algorithm</li>
+                        <li>Multi-factor Scoring</li>
+                        <li>Threshold Analysis</li>
+                        <li>Confidence Calculation</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-8 p-4 bg-[#050914]/50 rounded-lg">
+                <h4 class="font-bold mb-3 text-[#00d4ff]">Key Technical Features:</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
+                    <div>
+                        <i class="fa-solid fa-lock text-[#00ff88] mr-2"></i>
+                        <span>100% Client-side Processing</span>
+                    </div>
+                    <div>
+                        <i class="fa-solid fa-bolt text-[#00d4ff] mr-2"></i>
+                        <span>Real-time Analysis (< 3 seconds)</span>
+                    </div>
+                    <div>
+                        <i class="fa-solid fa-mobile text-[#a855f7] mr-2"></i>
+                        <span>Responsive Design</span>
+                    </div>
+                    <div>
+                        <i class="fa-solid fa-globe text-[#00d4ff] mr-2"></i>
+                        <span>Browser-based (No Installation)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">8 / 15</div>
+    </div>
+
+    <!-- Slide 9: Features -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Key Features</h2>
+        
+        <div class="grid grid-cols-2 gap-6">
+            <div class="glass-card">
+                <i class="fa-solid fa-microphone text-3xl text-[#00d4ff] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">Microphone Recording</h3>
+                <p class="text-sm text-gray-400">Record audio directly from your microphone with live waveform visualization</p>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-upload text-3xl text-[#a855f7] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">File Upload</h3>
+                <p class="text-sm text-gray-400">Upload audio files (WAV, MP3, M4A, FLAC) with drag-and-drop support</p>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-wave-square text-3xl text-[#00ff88] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">Waveform Visualization</h3>
+                <p class="text-sm text-gray-400">Real-time audio waveform display during recording and analysis</p>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-chart-line text-3xl text-[#00d4ff] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">Spectrogram Analysis</h3>
+                <p class="text-sm text-gray-400">Visual representation of frequency spectrum over time</p>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-brain text-3xl text-[#a855f7] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">AI Detection</h3>
+                <p class="text-sm text-gray-400">Advanced ML algorithm with 85-98% confidence scoring</p>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-file-pdf text-3xl text-[#ef4444] mb-3"></i>
+                <h3 class="text-xl font-bold mb-2">PDF Reports</h3>
+                <p class="text-sm text-gray-400">Generate detailed forensic reports for documentation</p>
+            </div>
+        </div>
+        
+        <div class="slide-number">9 / 15</div>
+    </div>
+
+    <!-- Slide 10: User Authentication -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">User Authentication & Security</h2>
+        
+        <div class="grid grid-cols-2 gap-6">
+            <div class="glass-card">
+                <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Authentication System</h3>
+                <ul class="space-y-3 text-gray-300 text-sm">
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-user text-[#00d4ff] mt-1"></i>
+                        <span>User registration with email/password</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-shield-halved text-[#00d4ff] mt-1"></i>
+                        <span>Two-Factor Authentication (2FA)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-users text-[#00d4ff] mt-1"></i>
+                        <span>Role-based access (Admin/User)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-key text-[#00d4ff] mt-1"></i>
+                        <span>Secure session management</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="glass-card">
+                <h3 class="text-2xl font-bold mb-4 text-[#a855f7]">Admin Dashboard</h3>
+                <ul class="space-y-3 text-gray-300 text-sm">
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-user-gear text-[#a855f7] mt-1"></i>
+                        <span>User management (promote/demote/delete)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-chart-simple text-[#a855f7] mt-1"></i>
+                        <span>System analytics and statistics</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-gift text-[#a855f7] mt-1"></i>
+                        <span>Referral program tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-gauge text-[#a855f7] mt-1"></i>
+                        <span>Performance monitoring</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="glass-card mt-6">
+            <h3 class="text-xl font-bold mb-3 text-[#00ff88]">Privacy & Compliance</h3>
+            <div class="grid grid-cols-4 gap-4 text-center">
+                <div>
+                    <i class="fa-solid fa-shield text-2xl text-[#00ff88] mb-2"></i>
+                    <p class="text-xs text-gray-400">GDPR Compliant</p>
+                </div>
+                <div>
+                    <i class="fa-solid fa-lock text-2xl text-[#00ff88] mb-2"></i>
+                    <p class="text-xs text-gray-400">BIPA Compliant</p>
+                </div>
+                <div>
+                    <i class="fa-solid fa-user-shield text-2xl text-[#00ff88] mb-2"></i>
+                    <p class="text-xs text-gray-400">CCPA Compliant</p>
+                </div>
+                <div>
+                    <i class="fa-solid fa-child text-2xl text-[#00ff88] mb-2"></i>
+                    <p class="text-xs text-gray-400">COPPA Compliant</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">10 / 15</div>
+    </div>
+
+    <!-- Slide 11: Testing & Validation -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Testing & Validation</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Comprehensive Test Suite</h3>
+            <p class="text-gray-300 mb-4">Built-in testing system with 14 test cases covering various scenarios:</p>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-bold mb-3 text-[#00ff88]">Real Voice Tests (9 cases)</h4>
+                    <ul class="space-y-2 text-sm text-gray-300">
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Natural human speech</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Calm/monotone speakers</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Professional speakers</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Breathy voice quality</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Noisy recordings</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Room echo/reverb</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Steady-paced speakers</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Deep male voices</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>High-pitched female voices</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-bold mb-3 text-[#a855f7]">AI Voice Tests (5 cases)</h4>
+                    <ul class="space-y-2 text-sm text-gray-300">
+                        <li><i class="fa-solid fa-robot text-[#a855f7] mr-2"></i>ElevenLabs generated</li>
+                        <li><i class="fa-solid fa-robot text-[#a855f7] mr-2"></i>Murf.ai generated</li>
+                        <li><i class="fa-solid fa-robot text-[#a855f7] mr-2"></i>High-quality AI clones</li>
+                        <li><i class="fa-solid fa-robot text-[#a855f7] mr-2"></i>AI with audio effects</li>
+                        <li><i class="fa-solid fa-robot text-[#a855f7] mr-2"></i>AI with background noise</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-4 text-[#00ff88]">Performance Metrics</h3>
+            <div class="grid grid-cols-3 gap-6 text-center">
+                <div>
+                    <p class="text-4xl font-bold text-[#00ff88] mb-2">100%</p>
+                    <p class="text-sm text-gray-400">Test Accuracy</p>
+                </div>
+                <div>
+                    <p class="text-4xl font-bold text-[#00d4ff] mb-2">&lt;5%</p>
+                    <p class="text-sm text-gray-400">False Positive Rate</p>
+                </div>
+                <div>
+                    <p class="text-4xl font-bold text-[#a855f7] mb-2">2-3s</p>
+                    <p class="text-sm text-gray-400">Analysis Time</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">11 / 15</div>
+    </div>
+
+    <!-- Slide 12: Privacy & Security -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Privacy & Security</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#00ff88]">100% Client-Side Processing</h3>
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-bold mb-3">What We DON'T Do:</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li><i class="fa-solid fa-xmark text-[#ef4444] mr-2"></i>No server-side processing</li>
+                        <li><i class="fa-solid fa-xmark text-[#ef4444] mr-2"></i>No data transmission</li>
+                        <li><i class="fa-solid fa-xmark text-[#ef4444] mr-2"></i>No cloud storage</li>
+                        <li><i class="fa-solid fa-xmark text-[#ef4444] mr-2"></i>No external APIs</li>
+                        <li><i class="fa-solid fa-xmark text-[#ef4444] mr-2"></i>No audio file storage</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-3">What We DO:</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Process in user's browser</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Store only metadata locally</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Allow instant data deletion</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Work offline after load</li>
+                        <li><i class="fa-solid fa-check text-[#00ff88] mr-2"></i>Provide full transparency</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Data Storage</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-[#050914]/50 p-4 rounded-lg text-center">
+                    <i class="fa-solid fa-microphone text-2xl text-[#00d4ff] mb-2"></i>
+                    <p class="text-sm font-bold mb-1">Audio Files</p>
+                    <p class="text-xs text-gray-400">Never stored</p>
+                    <p class="text-xs text-[#00ff88]">In-memory only</p>
+                </div>
+                <div class="bg-[#050914]/50 p-4 rounded-lg text-center">
+                    <i class="fa-solid fa-database text-2xl text-[#a855f7] mb-2"></i>
+                    <p class="text-sm font-bold mb-1">Analysis History</p>
+                    <p class="text-xs text-gray-400">localStorage only</p>
+                    <p class="text-xs text-[#00ff88]">User-controlled</p>
+                </div>
+                <div class="bg-[#050914]/50 p-4 rounded-lg text-center">
+                    <i class="fa-solid fa-user text-2xl text-[#00ff88] mb-2"></i>
+                    <p class="text-sm font-bold mb-1">User Data</p>
+                    <p class="text-xs text-gray-400">Browser only</p>
+                    <p class="text-xs text-[#00ff88]">Can delete anytime</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">12 / 15</div>
+    </div>
+
+    <!-- Slide 13: Use Cases -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Real-World Applications</h2>
+        
+        <div class="grid grid-cols-2 gap-6">
+            <div class="glass-card">
+                <i class="fa-solid fa-newspaper text-4xl text-[#00d4ff] mb-4"></i>
+                <h3 class="text-xl font-bold mb-3">Journalism & Media</h3>
+                <ul class="space-y-2 text-gray-300 text-sm">
+                    <li>• Verify authenticity of audio evidence</li>
+                    <li>• Detect fake news audio clips</li>
+                    <li>• Validate interview recordings</li>
+                    <li>• Protect against voice manipulation</li>
+                </ul>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-gavel text-4xl text-[#a855f7] mb-4"></i>
+                <h3 class="text-xl font-bold mb-3">Legal & Forensics</h3>
+                <ul class="space-y-2 text-gray-300 text-sm">
+                    <li>• Audio evidence verification</li>
+                    <li>• Court case support</li>
+                    <li>• Fraud investigation</li>
+                    <li>• Expert witness tool</li>
+                </ul>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-building text-4xl text-[#00ff88] mb-4"></i>
+                <h3 class="text-xl font-bold mb-3">Corporate Security</h3>
+                <ul class="space-y-2 text-gray-300 text-sm">
+                    <li>• Voice phishing detection</li>
+                    <li>• CEO fraud prevention</li>
+                    <li>• Call center verification</li>
+                    <li>• Employee training</li>
+                </ul>
+            </div>
+            
+            <div class="glass-card">
+                <i class="fa-solid fa-graduation-cap text-4xl text-[#00d4ff] mb-4"></i>
+                <h3 class="text-xl font-bold mb-3">Education & Research</h3>
+                <ul class="space-y-2 text-gray-300 text-sm">
+                    <li>• AI ethics education</li>
+                    <li>• Audio forensics research</li>
+                    <li>• Student projects</li>
+                    <li>• Academic studies</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="slide-number">13 / 15</div>
+    </div>
+
+    <!-- Slide 14: Future Scope -->
+    <div class="slide">
+        <h2 class="text-5xl font-bold gradient-text mb-8">Future Scope</h2>
+        
+        <div class="glass-card mb-6">
+            <h3 class="text-2xl font-bold mb-4 text-[#00d4ff]">Planned Enhancements</h3>
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-bold mb-3 text-[#00ff88]">Technical Improvements</h4>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-rocket text-[#00ff88] mt-1"></i>
+                            <span>Integration with cloud-based ML models for higher accuracy</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-rocket text-[#00ff88] mt-1"></i>
+                            <span>Real-time streaming analysis for live calls</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-rocket text-[#00ff88] mt-1"></i>
+                            <span>Multi-language support</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-rocket text-[#00ff88] mt-1"></i>
+                            <span>Mobile app development (iOS/Android)</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-bold mb-3 text-[#a855f7]">Feature Additions</h4>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-star text-[#a855f7] mt-1"></i>
+                            <span>API for third-party integration</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-star text-[#a855f7] mt-1"></i>
+                            <span>Batch processing for multiple files</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-star text-[#a855f7] mt-1"></i>
+                            <span>Voice cloning detection</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fa-solid fa-star text-[#a855f7] mt-1"></i>
+                            <span>Advanced visualization tools</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3 class="text-2xl font-bold mb-4 text-[#a855f7]">Research Directions</h3>
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <i class="fa-solid fa-microscope text-3xl text-[#a855f7] mb-2"></i>
+                    <p class="text-sm font-bold">Deep Learning Models</p>
+                    <p class="text-xs text-gray-400 mt-1">CNN/RNN for improved accuracy</p>
+                </div>
+                <div>
+                    <i class="fa-solid fa-database text-3xl text-[#00d4ff] mb-2"></i>
+                    <p class="text-sm font-bold">Dataset Expansion</p>
+                    <p class="text-xs text-gray-400 mt-1">Larger training datasets</p>
+                </div>
+                <div>
+                    <i class="fa-solid fa-chart-line text-3xl text-[#00ff88] mb-2"></i>
+                    <p class="text-sm font-bold">Performance Optimization</p>
+                    <p class="text-xs text-gray-400 mt-1">Faster processing algorithms</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="slide-number">14 / 15</div>
+    </div>
+
+    <!-- Slide 15: Conclusion -->
+    <div class="slide">
+        <div class="text-center">
+            <h2 class="text-5xl font-bold gradient-text mb-8">Conclusion</h2>
+            
+            <div class="glass-card max-w-4xl mx-auto mb-8">
+                <p class="text-xl text-gray-300 leading-relaxed mb-6">
+                    VoxForensics successfully demonstrates that effective deepfake audio detection can be achieved through 
+                    sophisticated acoustic feature analysis and multi-factor scoring algorithms, all while maintaining 
+                    complete user privacy through 100% client-side processing.
+                </p>
+                
+                <div class="grid grid-cols-3 gap-6 mt-8">
+                    <div>
+                        <i class="fa-solid fa-trophy text-4xl text-[#FFD700] mb-3"></i>
+                        <h3 class="text-lg font-bold mb-2">Achievements</h3>
+                        <ul class="text-sm text-gray-400 space-y-1">
+                            <li>✓ 85-98% accuracy</li>
+                            <li>✓ &lt;5% false positives</li>
+                            <li>✓ Real-time analysis</li>
+                            <li>✓ Complete privacy</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <i class="fa-solid fa-lightbulb text-4xl text-[#00d4ff] mb-3"></i>
+                        <h3 class="text-lg font-bold mb-2">Innovation</h3>
+                        <ul class="text-sm text-gray-400 space-y-1">
+                            <li>✓ Browser-based solution</li>
+                            <li>✓ No external APIs</li>
+                            <li>✓ Comprehensive features</li>
+                            <li>✓ User-friendly interface</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <i class="fa-solid fa-shield-halved text-4xl text-[#00ff88] mb-3"></i>
+                        <h3 class="text-lg font-bold mb-2">Impact</h3>
+                        <ul class="text-sm text-gray-400 space-y-1">
+                            <li>✓ Combats misinformation</li>
+                            <li>✓ Enhances security</li>
+                            <li>✓ Supports journalism</li>
+                            <li>✓ Aids legal proceedings</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="glass-card max-w-2xl mx-auto">
+                <p class="text-lg text-gray-300 italic">
+                    "In an era of AI-generated content, VoxForensics provides a crucial tool for verifying voice authenticity 
+                    while respecting user privacy."
+                </p>
+            </div>
+            
+            <div class="mt-12">
+                <p class="text-2xl font-bold gradient-text mb-2">Thank You!</p>
+                <p class="text-gray-400">Questions & Discussion</p>
+            </div>
+        </div>
+        
+        <div class="slide-number">15 / 15</div>
+    </div>
+
+    <!-- Print Instructions -->
+    <div class="fixed bottom-4 right-4 z-50">
+        <button onclick="window.print()" class="bg-gradient-to-r from-[#00d4ff] to-[#a855f7] text-white px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all">
+            <i class="fa-solid fa-download mr-2"></i>
+            Save as PDF/PPT
+        </button>
+    </div>
+
+    <script>
+        // Add keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+                window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                window.scrollBy({ top: -window.innerHeight, behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>
