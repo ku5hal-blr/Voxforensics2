@@ -39,7 +39,7 @@ html, body, #root {
 
 /* Gradient Text */
 .text-gradient {
-  background: linear-gradient(to right, #00d4ff, #a855f7);
+  background: linear-gradient(to right, #136b7c, #7b37bc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -49,26 +49,26 @@ html, body, #root {
    glossy top-down gradient + stacked drop-shadows for a solid 3D bevel
    extrusion, plus a soft neon glow */
 .hero-vox {
-  background: linear-gradient(180deg, #f0feff 0%, #bdf3ff 22%, #67e8f9 45%, #22b8f0 72%, #0284c7 100%);
+  background: linear-gradient(180deg, #5dbcc2 0%, #bdf3ff 22%, #44a5b2 45%, #0f5d79 72%, #53c6ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   filter:
-    drop-shadow(0 1px 0 #0e7490)
+    drop-shadow(0 1px 0 #14a4cb)
     drop-shadow(0 2px 0 #0e7490)
     drop-shadow(0 3px 0 #155e75)
-    drop-shadow(0 5px 7px rgba(2, 62, 94, 0.55))
-    drop-shadow(0 0 26px rgba(0, 212, 255, 0.45));
+    drop-shadow(0 5px 7px rgba(2, 74, 113, 0.55))
+    drop-shadow(0 0 26px rgba(0, 213, 255, 0.486));
 }
 .hero-fore {
-  background: linear-gradient(180deg, #fdf4ff 0%, #f0d5ff 22%, #d8b4fe 45%, #b06ef5 72%, #7e22ce 100%);
+  background: linear-gradient(180deg, #ebe2ed 0%, #d7bfe4 22%, #cba9ee 45%, #a065df 72%, #741fbe 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   filter:
-    drop-shadow(0 1px 0 #6b21a8)
-    drop-shadow(0 2px 0 #6b21a8)
-    drop-shadow(0 3px 0 #581c87)
+    drop-shadow(0 1px 0 #7224b1)
+    drop-shadow(0 2px 0 #6820a2)
+    drop-shadow(0 3px 0 #551b82)
     drop-shadow(0 5px 7px rgba(46, 16, 101, 0.6))
     drop-shadow(0 0 26px rgba(168, 85, 247, 0.5));
 }

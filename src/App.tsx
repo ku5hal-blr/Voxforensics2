@@ -1,6 +1,22 @@
-import { useState, useRef, useCallback } from 'react';
-import { AuthProvider, useAuth } from './components/AuthSystem';
-import { ConsentProvider, useConsent } from './components/ConsentModal';
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+} from 'react';
+
+import {
+  AuthProvider,
+  useAuth,
+} from './components/AuthSystem';
+
+import AuthSystem from './components/AuthSystem';
+
+import {
+  ConsentProvider,
+  useConsent,
+} from './components/ConsentModal';
+
 import {
   analyzeAudio,
   getScanHistory,
@@ -9,371 +25,668 @@ import {
   AnalysisResult,
   ScanRecord,
 } from './utils/analysis';
+
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import E2ETestPanel from './components/E2ETestPanel';
 import LiveBackground from './components/LiveBackground';
 import TestPanel from './components/TestPanel';
 
-type TabType = 'home' | 'scanner' | 'batch' | 'history' | 'about';
+type TabType =
+  | 'home'
+  | 'scanner'
+  | 'batch'
+  | 'history'
+  | 'about';
 
 function AppContent() {
   const { user, logout } = useAuth();
   const { hasConsented } = useConsent();
 
-  const [activeTab, setActiveTab] = useState<TabType>('home');
-  const [isRecording, setIsRecording] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] =
+    useState<TabType>('home');
+
+  const [isRecording, setIsRecording] =
+    useState(false);
+
+  const [isAnalyzing, setIsAnalyzing] =
+    useState(false);
+
   const [currentResult, setCurrentResult] =
     useState<AnalysisResult | null>(null);
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [waveformData, setWaveformData] = useState<number[]>([]);
-  const [spectrogramData, setSpectrogramData] = useState<number[][]>([]);
+
+  const [audioFile, setAudioFile] =
+    useState<File | null>(null);
+
+  /*
+   * ------------------------------------------------------------
+   * AUDIO PLAYBACK
+   * ------------------------------------------------------------
+   */
+
+  const [isPlaying, setIsPlaying] =
+    useState(false);
+
+  const [recordedAudioFile, setRecordedAudioFile] =
+    useState<File | null>(null);
+
+  const audioPreviewRef =
+    useRef<HTMLAudioElement | null>(null);
+
+  const audioObjectUrlRef =
+    useRef<string | null>(null);
+
+  const [audioPreviewUrl, setAudioPreviewUrl] =
+    useState<string | null>(null);
+
+  const [waveformData, setWaveformData] =
+    useState<number[]>([]);
+
+  const [spectrogramData, setSpectrogramData] =
+    useState<number[][]>([]);
+
   const [history, setHistory] =
     useState<ScanRecord[]>(getScanHistory());
-  const [batchFiles, setBatchFiles] = useState<File[]>([]);
-  const [batchResults, setBatchResults] = useState<
-    { filename: string; result: AnalysisResult }[]
-  >([]);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [showTestPanel, setShowTestPanel] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationRef = useRef<number>(0);
+  const [batchFiles, setBatchFiles] =
+    useState<File[]>([]);
+
+  const [batchResults, setBatchResults] =
+    useState<
+      {
+        filename: string;
+        result: AnalysisResult;
+      }[]
+    >([]);
+
+  const [recordingTime, setRecordingTime] =
+    useState(0);
+
+  const [showTestPanel, setShowTestPanel] =
+    useState(false);
+
+  const [showDashboard, setShowDashboard] =
+    useState(false);
+
+  // Authentication modal
+  const [showAuthModal, setShowAuthModal] =
+    useState(false);
+
+  // Login-required modal
+  const [showLoginRequiredModal, setShowLoginRequiredModal] =
+    useState(false);
+
+  const mediaRecorderRef =
+    useRef<MediaRecorder | null>(null);
+
+  const audioChunksRef =
+    useRef<Blob[]>([]);
+
+  const audioContextRef =
+    useRef<AudioContext | null>(null);
+
+  const analyserRef =
+    useRef<AnalyserNode | null>(null);
+
+  const animationRef =
+    useRef<number>(0);
+
   const recordingIntervalRef =
-    useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+    useRef<
+      ReturnType<typeof setInterval> | undefined
+    >(undefined);
 
   const homeFileInputRef =
     useRef<HTMLInputElement>(null);
+
   const scannerFileInputRef =
     useRef<HTMLInputElement>(null);
+
   const batchInputRef =
     useRef<HTMLInputElement>(null);
 
   const canvasWaveformRef =
     useRef<HTMLCanvasElement>(null);
+
   const canvasSpectrogramRef =
     useRef<HTMLCanvasElement>(null);
+
   const simulatedCanvasRef =
     useRef<HTMLCanvasElement>(null);
+
   const simAnimRef =
     useRef<number>(0);
+
   const streamRef =
     useRef<MediaStream | null>(null);
+
   const dropZoneRef =
     useRef<HTMLDivElement>(null);
+
+  // ------------------------------------------------------------
+  // AUDIO PREVIEW URL
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    if (!audioFile) {
+      setAudioPreviewUrl(null);
+
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(
+          audioObjectUrlRef.current
+        );
+
+        audioObjectUrlRef.current = null;
+      }
+
+      return;
+    }
+
+    const objectUrl =
+      URL.createObjectURL(audioFile);
+
+    audioObjectUrlRef.current =
+      objectUrl;
+
+    setAudioPreviewUrl(objectUrl);
+
+    return () => {
+      if (
+        audioObjectUrlRef.current ===
+        objectUrl
+      ) {
+        URL.revokeObjectURL(
+          objectUrl
+        );
+
+        audioObjectUrlRef.current =
+          null;
+      }
+    };
+  }, [audioFile]);
+
+  // ------------------------------------------------------------
+  // AUDIO PLAYBACK
+  // ------------------------------------------------------------
+
+  const stopAudioPlayback =
+    useCallback(() => {
+      const audio =
+        audioPreviewRef.current;
+
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+
+      setIsPlaying(false);
+    }, []);
+
+  const toggleAudioPlayback =
+    useCallback(async () => {
+      const audio =
+        audioPreviewRef.current;
+
+      if (!audio || !audioPreviewUrl) {
+        return;
+      }
+
+      try {
+        if (audio.paused) {
+          await audio.play();
+          setIsPlaying(true);
+        } else {
+          audio.pause();
+          setIsPlaying(false);
+        }
+      } catch (error) {
+        console.warn(
+          'Audio playback failed:',
+          error
+        );
+
+        setIsPlaying(false);
+      }
+    }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    const audio =
+      audioPreviewRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      audio.currentTime = 0;
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    audio.addEventListener(
+      'ended',
+      handleEnded
+    );
+
+    audio.addEventListener(
+      'pause',
+      handlePause
+    );
+
+    return () => {
+      audio.removeEventListener(
+        'ended',
+        handleEnded
+      );
+
+      audio.removeEventListener(
+        'pause',
+        handlePause
+      );
+    };
+  }, [audioPreviewUrl]);
+
+  // ------------------------------------------------------------
+  // CLOSE AUTH MODAL AFTER SUCCESSFUL LOGIN / REGISTRATION
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    if (user && showAuthModal) {
+      setShowAuthModal(false);
+    }
+  }, [user, showAuthModal]);
+
+  // ------------------------------------------------------------
+  // CLOSE DASHBOARD AFTER LOGOUT
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    if (!user && showDashboard) {
+      setShowDashboard(false);
+    }
+  }, [user, showDashboard]);
+
+  // ------------------------------------------------------------
+  // AUTHENTICATION PROTECTION
+  // ------------------------------------------------------------
+
+  const requireAuthentication = useCallback(() => {
+    if (!user) {
+      setShowLoginRequiredModal(true);
+      return false;
+    }
+
+    return true;
+  }, [user]);
+
+  const openLogin = () => {
+    setShowLoginRequiredModal(false);
+    setShowAuthModal(true);
+  };
 
   // ------------------------------------------------------------
   // SAMPLE DATA
   // ------------------------------------------------------------
 
-  const generateSampleWaveform = useCallback(
-    (isFake: boolean) => {
-      const points = 200;
-      const data: number[] = [];
+  const generateSampleWaveform =
+    useCallback(
+      (isFake: boolean) => {
+        const points = 200;
+        const data: number[] = [];
 
-      for (let i = 0; i < points; i++) {
-        const t = i / points;
+        for (let i = 0; i < points; i++) {
+          const t = i / points;
 
-        let value =
-          Math.sin(t * Math.PI * 8) * 0.5 +
-          Math.sin(t * Math.PI * 20) * 0.2 +
-          Math.sin(t * Math.PI * 50) * 0.1;
-
-        if (isFake) {
-          value +=
-            Math.sin(t * Math.PI * 100) * 0.05;
-          value *= 0.95 + Math.random() * 0.1;
-        } else {
-          value *= 0.8 + Math.random() * 0.4;
-        }
-
-        data.push(value);
-      }
-
-      return data;
-    },
-    []
-  );
-
-  const generateSampleSpectrogram = useCallback(
-    (isFake: boolean) => {
-      const frames = 60;
-      const bins = 40;
-      const data: number[][] = [];
-
-      for (let f = 0; f < frames; f++) {
-        const frame: number[] = [];
-
-        for (let b = 0; b < bins; b++) {
           let value =
-            Math.exp(-((b - 15) ** 2) / 80) *
-            0.8;
-
-          value +=
-            Math.sin(f * 0.1 + b * 0.2) * 0.15;
+            Math.sin(t * Math.PI * 8) * 0.5 +
+            Math.sin(t * Math.PI * 20) * 0.2 +
+            Math.sin(t * Math.PI * 50) * 0.1;
 
           if (isFake) {
-            if (f % 8 < 2) {
-              value += 0.1;
-            }
+            value +=
+              Math.sin(t * Math.PI * 100) * 0.05;
 
-            value += Math.random() * 0.05;
-          } else {
-            value += Math.random() * 0.15;
             value *=
-              0.7 + Math.sin(f * 0.05) * 0.3;
+              0.95 + Math.random() * 0.1;
+          } else {
+            value *=
+              0.8 + Math.random() * 0.4;
           }
 
-          frame.push(
-            Math.max(
-              0,
-              Math.min(1, value)
-            )
-          );
+          data.push(value);
         }
 
-        data.push(frame);
-      }
+        return data;
+      },
+      []
+    );
 
-      return data;
-    },
-    []
-  );
+  const generateSampleSpectrogram =
+    useCallback(
+      (isFake: boolean) => {
+        const frames = 60;
+        const bins = 40;
+        const data: number[][] = [];
+
+        for (let f = 0; f < frames; f++) {
+          const frame: number[] = [];
+
+          for (let b = 0; b < bins; b++) {
+            let value =
+              Math.exp(
+                -((b - 15) ** 2) / 80
+              ) * 0.8;
+
+            value +=
+              Math.sin(
+                f * 0.1 + b * 0.2
+              ) * 0.15;
+
+            if (isFake) {
+              if (f % 8 < 2) {
+                value += 0.1;
+              }
+
+              value +=
+                Math.random() * 0.05;
+            } else {
+              value +=
+                Math.random() * 0.15;
+
+              value *=
+                0.7 +
+                Math.sin(f * 0.05) *
+                  0.3;
+            }
+
+            frame.push(
+              Math.max(
+                0,
+                Math.min(1, value)
+              )
+            );
+          }
+
+          data.push(frame);
+        }
+
+        return data;
+      },
+      []
+    );
 
   // ------------------------------------------------------------
   // AUDIO PROCESSING
   // ------------------------------------------------------------
 
-  const processAudioFile = useCallback(
-    async (
-      file: File,
-      forceResult?: 'real' | 'fake'
-    ) => {
-      setIsAnalyzing(true);
-      setCurrentResult(null);
-      setAudioFile(file);
-
-      try {
-        const arrayBuffer =
-          await file.arrayBuffer();
-
-        if (arrayBuffer.byteLength < 100) {
-          throw new Error(
-            'Empty or invalid audio data'
-          );
+  const processAudioFile =
+    useCallback(
+      async (
+        file: File,
+        forceResult?: 'real' | 'fake'
+      ) => {
+        if (!user) {
+          setShowLoginRequiredModal(true);
+          return;
         }
 
-        const audioContext =
-          new AudioContext();
+        /*
+         * Stop any currently playing audio when a
+         * new file is processed.
+         */
+        stopAudioPlayback();
 
-        const audioBuffer =
-          await audioContext.decodeAudioData(
-            arrayBuffer
-          );
+        setIsAnalyzing(true);
+        setCurrentResult(null);
+        setAudioFile(file);
 
-        const channelData =
-          audioBuffer.getChannelData(0);
+        try {
+          const arrayBuffer =
+            await file.arrayBuffer();
 
-        const samples = 200;
-        const blockSize = Math.max(
-          1,
-          Math.floor(
-            channelData.length / samples
-          )
-        );
-
-        const waveform: number[] = [];
-
-        for (let i = 0; i < samples; i++) {
-          let sum = 0;
-
-          for (
-            let j = 0;
-            j < blockSize;
-            j++
-          ) {
-            const index =
-              i * blockSize + j;
-
-            if (
-              index < channelData.length
-            ) {
-              sum += Math.abs(
-                channelData[index]
-              );
-            }
+          if (arrayBuffer.byteLength < 100) {
+            throw new Error(
+              'Empty or invalid audio data'
+            );
           }
 
-          waveform.push(
-            sum / blockSize
-          );
-        }
+          const audioContext =
+            new AudioContext();
 
-        setWaveformData(waveform);
+          const audioBuffer =
+            await audioContext.decodeAudioData(
+              arrayBuffer
+            );
 
-        const specFrames = 60;
-        const specBins = 40;
-        const spectrogram: number[][] = [];
+          const channelData =
+            audioBuffer.getChannelData(0);
 
-        const frameSize = Math.max(
-          1,
-          Math.floor(
-            channelData.length /
-              specFrames
-          )
-        );
+          const samples = 200;
 
-        for (
-          let f = 0;
-          f < specFrames;
-          f++
-        ) {
-          const frame: number[] = [];
+          const blockSize =
+            Math.max(
+              1,
+              Math.floor(
+                channelData.length /
+                  samples
+              )
+            );
+
+          const waveform: number[] = [];
 
           for (
-            let b = 0;
-            b < specBins;
-            b++
+            let i = 0;
+            i < samples;
+            i++
           ) {
-            const start =
-              f * frameSize +
-              Math.floor(
-                (b * frameSize) /
-                  specBins
-              );
-
-            const end =
-              start +
-              Math.max(
-                1,
-                Math.floor(
-                  frameSize /
-                    specBins
-                )
-              );
-
-            let energy = 0;
-            let count = 0;
+            let sum = 0;
 
             for (
-              let s = start;
-              s <
+              let j = 0;
+              j < blockSize;
+              j++
+            ) {
+              const index =
+                i * blockSize + j;
+
+              if (
+                index <
+                channelData.length
+              ) {
+                sum += Math.abs(
+                  channelData[index]
+                );
+              }
+            }
+
+            waveform.push(
+              sum / blockSize
+            );
+          }
+
+          setWaveformData(
+            waveform
+          );
+
+          const specFrames = 60;
+          const specBins = 40;
+
+          const spectrogram: number[][] =
+            [];
+
+          const frameSize =
+            Math.max(
+              1,
+              Math.floor(
+                channelData.length /
+                  specFrames
+              )
+            );
+
+          for (
+            let f = 0;
+            f < specFrames;
+            f++
+          ) {
+            const frame: number[] =
+              [];
+
+            for (
+              let b = 0;
+              b < specBins;
+              b++
+            ) {
+              const start =
+                f * frameSize +
+                Math.floor(
+                  (b * frameSize) /
+                    specBins
+                );
+
+              const end =
+                start +
+                Math.max(
+                  1,
+                  Math.floor(
+                    frameSize /
+                      specBins
+                  )
+                );
+
+              let energy = 0;
+              let count = 0;
+
+              for (
+                let s = start;
+                s <
                 Math.min(
                   end,
                   channelData.length
                 );
-              s++
-            ) {
-              energy +=
-                channelData[s] *
-                channelData[s];
+                s++
+              ) {
+                energy +=
+                  channelData[s] *
+                  channelData[s];
 
-              count++;
+                count++;
+              }
+
+              const rms =
+                count > 0
+                  ? Math.sqrt(
+                      energy / count
+                    )
+                  : 0;
+
+              frame.push(
+                Math.min(
+                  1,
+                  rms * 10
+                )
+              );
             }
 
-            const rms =
-              count > 0
-                ? Math.sqrt(
-                    energy / count
-                  )
-                : 0;
-
-            frame.push(
-              Math.min(
-                1,
-                rms * 10
-              )
+            spectrogram.push(
+              frame
             );
           }
 
-          spectrogram.push(frame);
+          setSpectrogramData(
+            spectrogram
+          );
+
+          const result =
+            await analyzeAudio(
+              audioBuffer,
+              file.name,
+              forceResult
+            );
+
+          setCurrentResult(
+            result
+          );
+
+          saveScanToHistory(
+            file.name,
+            result,
+            audioBuffer.duration
+          );
+
+          setHistory(
+            getScanHistory()
+          );
+
+          await audioContext.close();
+        } catch (error) {
+          console.warn(
+            'Audio processing fallback:',
+            error
+          );
+
+          const isFake =
+            forceResult === 'fake';
+
+          setWaveformData(
+            generateSampleWaveform(
+              isFake
+            )
+          );
+
+          setSpectrogramData(
+            generateSampleSpectrogram(
+              isFake
+            )
+          );
+
+          const result =
+            await analyzeAudio(
+              null,
+              file.name,
+              forceResult
+            );
+
+          setCurrentResult(
+            result
+          );
+
+          saveScanToHistory(
+            file.name,
+            result,
+            3 + Math.random() * 7
+          );
+
+          setHistory(
+            getScanHistory()
+          );
         }
 
-        setSpectrogramData(
-          spectrogram
-        );
-
-        const result =
-          await analyzeAudio(
-            audioBuffer,
-            file.name,
-            forceResult
-          );
-
-        setCurrentResult(result);
-
-        saveScanToHistory(
-          file.name,
-          result,
-          audioBuffer.duration
-        );
-
-        setHistory(
-          getScanHistory()
-        );
-
-        await audioContext.close();
-      } catch (error) {
-        console.warn(
-          'Audio processing fallback:',
-          error
-        );
-
-        const isFake =
-          forceResult === 'fake';
-
-        setWaveformData(
-          generateSampleWaveform(
-            isFake
-          )
-        );
-
-        setSpectrogramData(
-          generateSampleSpectrogram(
-            isFake
-          )
-        );
-
-        const result =
-          await analyzeAudio(
-            null,
-            file.name,
-            forceResult
-          );
-
-        setCurrentResult(result);
-
-        saveScanToHistory(
-          file.name,
-          result,
-          3 + Math.random() * 7
-        );
-
-        setHistory(
-          getScanHistory()
-        );
-      }
-
-      setIsAnalyzing(false);
-    },
-    [
-      generateSampleWaveform,
-      generateSampleSpectrogram,
-    ]
-  );
+        setIsAnalyzing(false);
+      },
+      [
+        user,
+        generateSampleWaveform,
+        generateSampleSpectrogram,
+        stopAudioPlayback,
+      ]
+    );
 
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
+    if (!requireAuthentication()) {
+      e.target.value = '';
+      return;
+    }
+
     const file =
       e.target.files?.[0];
 
     if (file) {
+      setRecordedAudioFile(null);
       processAudioFile(file);
     }
 
@@ -381,13 +694,20 @@ function AppContent() {
   };
 
   const handleSampleReal = () => {
-    const sampleFile = new File(
-      ['sample'],
-      'sample_real_speech.wav',
-      {
-        type: 'audio/wav',
-      }
-    );
+    if (!requireAuthentication()) {
+      return;
+    }
+
+    const sampleFile =
+      new File(
+        ['sample'],
+        'sample_real_speech.wav',
+        {
+          type: 'audio/wav',
+        }
+      );
+
+    setRecordedAudioFile(null);
 
     processAudioFile(
       sampleFile,
@@ -396,13 +716,20 @@ function AppContent() {
   };
 
   const handleSampleFake = () => {
-    const sampleFile = new File(
-      ['sample'],
-      'sample_deepfake_voice.wav',
-      {
-        type: 'audio/wav',
-      }
-    );
+    if (!requireAuthentication()) {
+      return;
+    }
+
+    const sampleFile =
+      new File(
+        ['sample'],
+        'sample_deepfake_voice.wav',
+        {
+          type: 'audio/wav',
+        }
+      );
+
+    setRecordedAudioFile(null);
 
     processAudioFile(
       sampleFile,
@@ -463,8 +790,10 @@ function AppContent() {
       ctx.lineWidth = 2;
       ctx.strokeStyle =
         '#00d4ff';
+
       ctx.shadowColor =
         '#00d4ff';
+
       ctx.shadowBlur = 6;
 
       ctx.beginPath();
@@ -517,7 +846,10 @@ function AppContent() {
       const analyser =
         analyserRef.current;
 
-      if (!canvas || !analyser) {
+      if (
+        !canvas ||
+        !analyser
+      ) {
         return;
       }
 
@@ -570,16 +902,20 @@ function AppContent() {
       );
 
       ctx.lineWidth = 2;
+
       ctx.strokeStyle =
         '#00d4ff';
+
       ctx.shadowColor =
         '#00d4ff';
+
       ctx.shadowBlur = 6;
 
       ctx.beginPath();
 
       const sliceWidth =
-        width / bufferLength;
+        width /
+        bufferLength;
 
       let x = 0;
 
@@ -620,6 +956,18 @@ function AppContent() {
 
   const startRecording =
     async () => {
+      if (!requireAuthentication()) {
+        return;
+      }
+
+      /*
+       * Starting a new recording should stop
+       * any existing playback.
+       */
+      stopAudioPlayback();
+
+      setRecordedAudioFile(null);
+
       if (
         !navigator.mediaDevices ||
         !navigator.mediaDevices
@@ -633,7 +981,8 @@ function AppContent() {
         recordingIntervalRef.current =
           setInterval(() => {
             setRecordingTime(
-              (time) => time + 1
+              (time) =>
+                time + 1
             );
           }, 1000);
 
@@ -675,7 +1024,9 @@ function AppContent() {
 
         mediaRecorder.onstop =
           async () => {
-            if (streamRef.current) {
+            if (
+              streamRef.current
+            ) {
               streamRef.current
                 .getTracks()
                 .forEach(
@@ -708,6 +1059,14 @@ function AppContent() {
                   }
                 );
 
+              /*
+               * Keep a reference specifically so the
+               * UI knows this is a completed recording.
+               */
+              setRecordedAudioFile(
+                file
+              );
+
               await processAudioFile(
                 file
               );
@@ -731,7 +1090,9 @@ function AppContent() {
         const analyser =
           audioContext.createAnalyser();
 
-        analyser.fftSize = 2048;
+        analyser.fftSize =
+          2048;
+
         analyser.smoothingTimeConstant =
           0.8;
 
@@ -754,7 +1115,8 @@ function AppContent() {
         recordingIntervalRef.current =
           setInterval(() => {
             setRecordingTime(
-              (time) => time + 1
+              (time) =>
+                time + 1
             );
           }, 1000);
       } catch (error) {
@@ -771,7 +1133,8 @@ function AppContent() {
         recordingIntervalRef.current =
           setInterval(() => {
             setRecordingTime(
-              (time) => time + 1
+              (time) =>
+                time + 1
             );
           }, 1000);
       }
@@ -841,6 +1204,11 @@ function AppContent() {
 
       setIsRecording(false);
 
+      /*
+       * Browser fallback when MediaRecorder
+       * is unavailable or recording could not
+       * actually be created.
+       */
       if (!hasRealRecorder) {
         const simulatedFile =
           new File(
@@ -850,6 +1218,10 @@ function AppContent() {
               type: 'audio/webm',
             }
           );
+
+        setRecordedAudioFile(
+          simulatedFile
+        );
 
         processAudioFile(
           simulatedFile
@@ -865,12 +1237,19 @@ function AppContent() {
     async (
       e: React.ChangeEvent<HTMLInputElement>
     ) => {
+      if (!requireAuthentication()) {
+        e.target.value = '';
+        return;
+      }
+
       const files =
         Array.from(
           e.target.files || []
         );
 
-      if (files.length === 0) {
+      if (
+        files.length === 0
+      ) {
         return;
       }
 
@@ -926,12 +1305,23 @@ function AppContent() {
   // DASHBOARD
   // ------------------------------------------------------------
 
-  if (showDashboard) {
-    if (user?.role === 'admin') {
+  /*
+   * Do not allow dashboard access until the
+   * authenticated user has accepted consent.
+   */
+  if (user && !hasConsented) {
+    return null;
+  }
+
+  if (showDashboard && user) {
+    if (user.role === 'admin') {
       return (
         <AdminDashboard
           currentUser={user}
-          onLogout={logout}
+          onLogout={() => {
+            logout();
+            setShowDashboard(false);
+          }}
           onBack={() =>
             setShowDashboard(false)
           }
@@ -941,17 +1331,16 @@ function AppContent() {
 
     return (
       <UserDashboard
-        currentUser={user!}
-        onLogout={logout}
+        currentUser={user}
+        onLogout={() => {
+          logout();
+          setShowDashboard(false);
+        }}
         onBack={() =>
           setShowDashboard(false)
         }
       />
     );
-  }
-
-  if (!hasConsented) {
-    return null;
   }
 
   // ------------------------------------------------------------
@@ -967,6 +1356,7 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 
           <div className="flex items-center gap-3">
+
             <div className="w-9 h-9 rounded-full bg-[#060d1f] border border-[#00d4ff]/50 flex items-center justify-center shadow-[0_0_14px_rgba(0,212,255,0.35)]">
               <i className="fa-solid fa-wave-square text-[#00d4ff] text-sm"></i>
             </div>
@@ -980,9 +1370,11 @@ function AppContent() {
                 Deepfake Audio Detector
               </p>
             </div>
+
           </div>
 
           <div className="hidden md:flex items-center gap-1">
+
             {(
               [
                 'home',
@@ -1027,16 +1419,17 @@ function AppContent() {
                   tab.slice(1)}
               </button>
             ))}
+
           </div>
 
+          {/* AUTH NAVIGATION */}
           <div className="flex items-center gap-3">
-            {user && (
+
+            {user ? (
               <>
                 <button
                   onClick={() =>
-                    setShowDashboard(
-                      true
-                    )
+                    setShowDashboard(true)
                   }
                   className="text-sm text-gray-400 hover:text-white transition"
                 >
@@ -1045,18 +1438,29 @@ function AppContent() {
                 </button>
 
                 <button
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    setShowDashboard(false);
+                  }}
                   className="text-sm text-gray-400 hover:text-white transition"
                 >
                   <i className="fa-solid fa-right-from-bracket"></i>
                 </button>
               </>
+            ) : (
+              <button
+                onClick={() =>
+                  setShowAuthModal(true)
+                }
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#8b5cf6]/70 via-[#6366f1]/70 to-[#22d3ee]/70 border border-[#8b5cf6]/30 shadow-[0_0_16px_rgba(139,92,246,0.2)] hover:brightness-110 hover:shadow-[0_0_22px_rgba(139,92,246,0.35)] transition-all duration-300"
+              >
+                <i className="fa-solid fa-right-to-bracket mr-2"></i>
+                Login / Sign Up
+              </button>
             )}
 
-            <button className="w-9 h-9 rounded-full bg-[#0d1830]/80 border border-[#1e3a5f] flex items-center justify-center text-gray-300 hover:text-white transition">
-              <i className="fa-solid fa-moon text-sm"></i>
-            </button>
           </div>
+
         </div>
       </nav>
 
@@ -1074,15 +1478,16 @@ function AppContent() {
             <div className="space-y-8">
 
               <div className="relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-[#00d4ff] via-[#a855f7] to-[#00ff88] shadow-[0_0_22px_rgba(0,212,255,0.3)]">
-  <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-4 py-1.5 backdrop-blur-sm">
-    <span className="text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
-      AI • AUDIO • FORENSICS
-    </span>
-  </div>
-               </div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-4 py-1.5 backdrop-blur-sm">
+                  <span className="text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
+                    AI • AUDIO • FORENSICS
+                  </span>
+                </div>
+              </div>
 
               <div>
                 <h2 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-none mb-3">
+
                   <span className="hero-vox">
                     Vox
                   </span>
@@ -1090,6 +1495,7 @@ function AppContent() {
                   <span className="hero-fore">
                     Forensics
                   </span>
+
                 </h2>
 
                 <h3 className="text-sm md:text-base tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
@@ -1099,11 +1505,11 @@ function AppContent() {
 
               <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
                 Is that voice{' '}
-                <span className="text-[#00ff88]">
+                <span className="text-[#00c66a]">
                   Real
                 </span>
                 , or{' '}
-                <span className="text-[#a855f7]">
+                <span className="text-[#8b45cd]">
                   AI-generated
                 </span>{' '}
                 ?
@@ -1114,6 +1520,7 @@ function AppContent() {
               </p>
 
               <div className="flex flex-wrap gap-4">
+
                 <button
                   onClick={
                     handleSampleReal
@@ -1139,6 +1546,7 @@ function AppContent() {
 
                   Try sample: AI clone
                 </button>
+
               </div>
 
               <p className="text-xs text-gray-400 tracking-wide drop-shadow">
@@ -1146,6 +1554,7 @@ function AppContent() {
               </p>
 
               <div className="pt-8 border-t border-[#1a2a4a]/50">
+
                 <p className="text-xs font-semibold tracking-widest text-gray-400 mb-4 uppercase drop-shadow">
                   What you get in every scan
                 </p>
@@ -1172,7 +1581,7 @@ function AppContent() {
                     </h4>
 
                     <p className="text-[11px] text-gray-400 leading-relaxed">
-                      MFCC, pitch, spectral centroid, ZCR and chroma.
+                      RMS energy, pitch, spectral centroid, ZCR and chroma.
                     </p>
                   </div>
 
@@ -1202,6 +1611,7 @@ function AppContent() {
 
                 </div>
               </div>
+
             </div>
 
             {/* RIGHT */}
@@ -1219,9 +1629,13 @@ function AppContent() {
 
                 <div
                   ref={dropZoneRef}
-                  onClick={() =>
-                    homeFileInputRef.current?.click()
-                  }
+                  onClick={() => {
+                    if (!requireAuthentication()) {
+                      return;
+                    }
+
+                    homeFileInputRef.current?.click();
+                  }}
                   className="border-2 border-dashed border-[#1a2a4a] hover:border-[#00d4ff]/50 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-300 bg-[#050914]/30 mb-3 group"
                 >
                   <input
@@ -1272,41 +1686,111 @@ function AppContent() {
                 </p>
 
                 {audioFile && (
-                  <div className="mt-3 p-2.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg flex items-center justify-between">
+                  <div className="mt-3 p-2.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg">
 
-                    <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="flex items-center justify-between">
 
-                      <i className="fa-solid fa-file-audio text-[#00d4ff] text-sm"></i>
+                      <div className="flex items-center gap-2 overflow-hidden">
 
-                      <div className="truncate">
-                        <p className="text-[11px] font-semibold text-white truncate">
-                          {audioFile.name}
-                        </p>
+                        <i className="fa-solid fa-file-audio text-[#00d4ff] text-sm"></i>
 
-                        <p className="text-[9px] text-gray-400">
-                          {(
-                            audioFile.size /
-                            (1024 * 1024)
-                          ).toFixed(2)}{' '}
-                          MB
-                        </p>
+                        <div className="truncate">
+                          <p className="text-[11px] font-semibold text-white truncate">
+                            {audioFile.name}
+                          </p>
+
+                          <p className="text-[9px] text-gray-400">
+                            {(
+                              audioFile.size /
+                              (1024 * 1024)
+                            ).toFixed(2)}{' '}
+                            MB
+                          </p>
+                        </div>
+
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+
+                          stopAudioPlayback();
+
+                          setAudioFile(
+                            null
+                          );
+
+                          setRecordedAudioFile(
+                            null
+                          );
+
+                          setCurrentResult(
+                            null
+                          );
+                        }}
+                        className="text-gray-400 hover:text-white transition ml-2"
+                        aria-label="Remove audio"
+                      >
+                        <i className="fa-solid fa-xmark text-sm"></i>
+                      </button>
 
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setAudioFile(
-                          null
-                        );
-                        setCurrentResult(
-                          null
-                        );
-                      }}
-                      className="text-gray-400 hover:text-white transition ml-2"
-                    >
-                      <i className="fa-solid fa-xmark text-sm"></i>
-                    </button>
+                    {/* UPLOADED / CURRENT AUDIO PLAYBACK */}
+
+                    {audioPreviewUrl && (
+                      <div className="mt-2 pt-2 border-t border-[#00d4ff]/20 flex items-center gap-2">
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAudioPlayback();
+                          }}
+                          className="w-8 h-8 rounded-full bg-[#00d4ff]/15 border border-[#00d4ff]/40 flex items-center justify-center text-[#00d4ff] hover:text-white hover:bg-[#00d4ff]/25 transition"
+                          aria-label={
+                            isPlaying
+                              ? 'Pause audio'
+                              : 'Play audio'
+                          }
+                        >
+                          <i
+                            className={`fa-solid ${
+                              isPlaying
+                                ? 'fa-pause'
+                                : 'fa-play'
+                            } text-[10px]`}
+                          ></i>
+                        </button>
+
+                        <div className="flex-1">
+
+                          <p className="text-[10px] text-gray-300">
+                            {recordedAudioFile
+                              ? 'Recorded audio'
+                              : 'Uploaded audio'}
+                          </p>
+
+                          <p className="text-[9px] text-gray-500">
+                            {isPlaying
+                              ? 'Playing...'
+                              : 'Click play to preview'}
+                          </p>
+
+                        </div>
+
+                        <audio
+                          ref={
+                            audioPreviewRef
+                          }
+                          src={
+                            audioPreviewUrl
+                          }
+                          preload="metadata"
+                          className="hidden"
+                        />
+
+                      </div>
+                    )}
 
                   </div>
                 )}
@@ -1359,7 +1843,10 @@ function AppContent() {
                           2, 4, 6, 8, 6, 4,
                           2, 5, 7, 3, 6, 4,
                         ].map(
-                          (h, i) => (
+                          (
+                            h,
+                            i
+                          ) => (
                             <div
                               key={i}
                               className="visualizer-bar"
@@ -1373,6 +1860,7 @@ function AppContent() {
                     )}
 
                   </div>
+
                 </div>
 
                 <p className="text-[10px] text-gray-400 leading-relaxed mb-3">
@@ -1388,7 +1876,7 @@ function AppContent() {
                   className={`w-full font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
                     isRecording
                       ? 'bg-gradient-to-r from-red-500/80 to-red-500/80 hover:from-red-500 hover:to-red-500 text-white'
-                      : 'bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#22d3ee] text-white shadow-[0_0_20px_rgba(139,92,246,0.35)] hover:shadow-[0_0_28px_rgba(139,92,246,0.5)] hover:brightness-110'
+                      : 'bg-gradient-to-r from-[#8b5cf6]/50 via-[#6366f1]/50 to-[#22d3ee]/50 text-white shadow-[0_0_20px_rgba(139,92,246,0.35)] hover:shadow-[0_0_28px_rgba(139,92,246,0.5)] hover:brightness-125'
                   }`}
                 >
                   <i
@@ -1406,9 +1894,62 @@ function AppContent() {
                     : 'Start Recording'}
                 </button>
 
+                {/* RECORDED AUDIO PLAYBACK */}
+
+                {recordedAudioFile &&
+                  !isRecording &&
+                  audioPreviewUrl && (
+                    <div className="mt-3 p-3 rounded-lg bg-[#a855f7]/10 border border-[#a855f7]/30">
+
+                      <div className="flex items-center gap-3">
+
+                        <button
+                          onClick={
+                            toggleAudioPlayback
+                          }
+                          className="w-9 h-9 rounded-full bg-[#a855f7]/20 border border-[#a855f7]/50 flex items-center justify-center text-[#d8b4fe] hover:text-white hover:bg-[#a855f7]/30 transition flex-shrink-0"
+                          aria-label={
+                            isPlaying
+                              ? 'Pause recorded audio'
+                              : 'Play recorded audio'
+                          }
+                        >
+                          <i
+                            className={`fa-solid ${
+                              isPlaying
+                                ? 'fa-pause'
+                                : 'fa-play'
+                            } text-[10px]`}
+                          ></i>
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+
+                          <p className="text-[11px] font-semibold text-white">
+                            Recording complete
+                          </p>
+
+                          <p className="text-[9px] text-gray-400 truncate">
+                            {recordedAudioFile.name}
+                          </p>
+
+                        </div>
+
+                        <span className="text-[9px] text-[#a855f7] font-semibold uppercase tracking-wider">
+                          {isPlaying
+                            ? 'Playing'
+                            : 'Ready'}
+                        </span>
+
+                      </div>
+
+                    </div>
+                  )}
+
               </div>
 
               {/* ANALYZING */}
+
               {isAnalyzing && (
                 <div className="glass-panel p-6 relative z-10 fade-in">
 
@@ -1425,10 +1966,12 @@ function AppContent() {
                     </p>
 
                   </div>
+
                 </div>
               )}
 
               {/* RESULTS */}
+
               {currentResult &&
                 !isAnalyzing && (
                   <div className="glass-panel p-6 relative z-10 fade-in">
@@ -1460,6 +2003,7 @@ function AppContent() {
                         </div>
 
                         <div className="text-right">
+
                           <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
                             Confidence
                           </p>
@@ -1479,6 +2023,7 @@ function AppContent() {
                             )}
                             %
                           </p>
+
                         </div>
 
                       </div>
@@ -1486,37 +2031,43 @@ function AppContent() {
                       <div className="grid grid-cols-2 gap-2">
 
                         <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
                           <p className="text-[10px] text-gray-500 uppercase">
-                            MFCC
+                            RMS Energy
                           </p>
 
                           <p className="text-xs font-mono text-[#00d4ff]">
-                            {currentResult.features.mfccEnergy.toFixed(
+                            {currentResult.features.rmsEnergy.toFixed(
                               3
                             )}
                           </p>
+
                         </div>
 
                         <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
                           <p className="text-[10px] text-gray-500 uppercase">
                             Pitch
                           </p>
 
                           <p className="text-xs font-mono text-[#00d4ff]">
-                            {currentResult.features.pitchVariability.toFixed(
+                            {currentResult.features.pitchVariation.toFixed(
                               3
                             )}
                           </p>
+
                         </div>
 
                         <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
                           <p className="text-[10px] text-gray-500 uppercase">
                             Centroid
                           </p>
 
                           <p className="text-xs font-mono text-[#00d4ff]">
                             {(
-                              currentResult.features
+                              currentResult
+                                .features
                                 .spectralCentroid /
                               1000
                             ).toFixed(
@@ -1524,9 +2075,11 @@ function AppContent() {
                             )}{' '}
                             kHz
                           </p>
+
                         </div>
 
                         <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
                           <p className="text-[10px] text-gray-500 uppercase">
                             ZCR
                           </p>
@@ -1536,25 +2089,35 @@ function AppContent() {
                               3
                             )}
                           </p>
+
                         </div>
 
                       </div>
 
                       <div className="waveform-container">
+
                         <canvas
                           ref={
                             canvasWaveformRef
                           }
                           className="w-full h-16"
                         />
+
                       </div>
 
                       <button
                         onClick={() => {
+                          stopAudioPlayback();
+
                           setCurrentResult(
                             null
                           );
+
                           setAudioFile(
+                            null
+                          );
+
+                          setRecordedAudioFile(
                             null
                           );
                         }}
@@ -1602,9 +2165,13 @@ function AppContent() {
               />
 
               <button
-                onClick={() =>
-                  scannerFileInputRef.current?.click()
-                }
+                onClick={() => {
+                  if (!requireAuthentication()) {
+                    return;
+                  }
+
+                  scannerFileInputRef.current?.click();
+                }}
                 className="neon-btn neon-btn-primary"
               >
                 <i className="fa-solid fa-upload mr-2"></i>
@@ -1644,9 +2211,13 @@ function AppContent() {
               />
 
               <button
-                onClick={() =>
-                  batchInputRef.current?.click()
-                }
+                onClick={() => {
+                  if (!requireAuthentication()) {
+                    return;
+                  }
+
+                  batchInputRef.current?.click();
+                }}
                 className="neon-btn neon-btn-primary"
               >
                 <i className="fa-solid fa-layer-group mr-2"></i>
@@ -1683,6 +2254,7 @@ function AppContent() {
                         key={index}
                         className="batch-item"
                       >
+
                         <div className="flex items-center justify-between">
 
                           <div className="flex items-center gap-2">
@@ -1720,6 +2292,7 @@ function AppContent() {
                           </span>
 
                         </div>
+
                       </div>
                     )
                   )}
@@ -1791,6 +2364,7 @@ function AppContent() {
                           ></span>
 
                           <div>
+
                             <p className="text-white text-sm font-medium">
                               {
                                 record.filename
@@ -1802,6 +2376,7 @@ function AppContent() {
                                 record.timestamp
                               ).toLocaleString()}
                             </p>
+
                           </div>
 
                         </div>
@@ -1907,7 +2482,6 @@ function AppContent() {
               </button>
 
             </div>
-
           </div>
         )}
 
@@ -1919,6 +2493,7 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
 
           <div className="flex items-center gap-2">
+
             <span className="font-bold text-white">
               VoxForensics
             </span>
@@ -1932,6 +2507,7 @@ function AppContent() {
             <span>
               AI Voice Deepfake Detection
             </span>
+
           </div>
 
           <div className="flex items-center gap-4">
@@ -1945,12 +2521,104 @@ function AppContent() {
         </div>
       </footer>
 
+      {/* E2E TEST PANEL */}
       {showTestPanel && (
         <E2ETestPanel
           onClose={() =>
             setShowTestPanel(false)
           }
         />
+      )}
+
+      {/* ================================================== */}
+      {/* LOGIN / SIGN UP MODAL */}
+      {/* ================================================== */}
+
+      {showAuthModal && !user && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() =>
+            setShowAuthModal(false)
+          }
+        >
+          <div
+            className="relative w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+
+            {/* CLOSE BUTTON */}
+            <button
+              onClick={() =>
+                setShowAuthModal(false)
+              }
+              className="absolute top-3 right-3 z-20 w-9 h-9 rounded-full bg-[#0d1830]/90 border border-[#1e3a5f] flex items-center justify-center text-gray-400 hover:text-white hover:border-[#00d4ff]/50 transition"
+              aria-label="Close"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+
+            <AuthSystem />
+
+          </div>
+        </div>
+      )}
+
+      {/* ================================================== */}
+      {/* LOGIN REQUIRED MODAL */}
+      {/* ================================================== */}
+
+      {showLoginRequiredModal && !user && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() =>
+            setShowLoginRequiredModal(false)
+          }
+        >
+          <div
+            className="glass-panel w-full max-w-sm p-6 relative"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+
+            <button
+              onClick={() =>
+                setShowLoginRequiredModal(false)
+              }
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#0d1830]/90 border border-[#1e3a5f] flex items-center justify-center text-gray-400 hover:text-white transition"
+              aria-label="Close"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+
+            <div className="text-center pt-2">
+
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#22d3ee] flex items-center justify-center shadow-[0_0_24px_rgba(139,92,246,0.3)]">
+                <i className="fa-solid fa-lock text-white text-xl"></i>
+              </div>
+
+              <h3 className="text-xl font-bold text-white mb-2">
+                Login / Register Required
+              </h3>
+
+              <p className="text-sm text-gray-400 leading-relaxed mb-6">
+                Please login or create an account to use this feature.
+              </p>
+
+              <button
+                onClick={openLogin}
+                className="w-full px-4 py-3 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#8b5cf6]/80 via-[#6366f1]/80 to-[#22d3ee]/80 border border-[#8b5cf6]/30 shadow-[0_0_18px_rgba(139,92,246,0.25)] hover:brightness-110 hover:shadow-[0_0_24px_rgba(139,92bif,0.4)] transition-all duration-300"
+              >
+                <i className="fa-solid fa-right-to-bracket mr-2"></i>
+                Login / Sign Up
+              </button>
+
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>

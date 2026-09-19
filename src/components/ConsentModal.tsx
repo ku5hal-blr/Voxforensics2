@@ -1,4 +1,11 @@
-import { useState, createContext, useContext, ReactNode } from 'react';
+import {
+  useState,
+  createContext,
+  useContext,
+  ReactNode,
+} from 'react';
+
+import { useAuth } from './AuthSystem';
 
 interface ConsentContextType {
   hasConsented: boolean;
@@ -10,11 +17,21 @@ const ConsentContext = createContext<ConsentContextType | null>(null);
 
 export function useConsent() {
   const context = useContext(ConsentContext);
-  if (!context) throw new Error('useConsent must be used within ConsentProvider');
+
+  if (!context) {
+    throw new Error('useConsent must be used within ConsentProvider');
+  }
+
   return context;
 }
 
-export function ConsentProvider({ children }: { children: ReactNode }) {
+export function ConsentProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const { user } = useAuth();
+
   const [hasConsented, setHasConsented] = useState(() => {
     const saved = localStorage.getItem('voxforensics_consent');
     return saved === 'true';
@@ -31,136 +48,215 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ConsentContext.Provider value={{ hasConsented, giveConsent, revokeConsent }}>
+    <ConsentContext.Provider
+      value={{
+        hasConsented,
+        giveConsent,
+        revokeConsent,
+      }}
+    >
       {children}
-      {!hasConsented && <ConsentModal onAccept={giveConsent} />}
+
+      {/* 
+        Consent is only shown to an authenticated user.
+        This means the flow is:
+
+        Login/Register
+              ↓
+        Consent Modal
+              ↓
+        I Agree
+              ↓
+        Application
+      */}
+      {user && !hasConsented && (
+        <ConsentModal onAccept={giveConsent} />
+      )}
     </ConsentContext.Provider>
   );
 }
 
-export default function ConsentModal({ onAccept }: { onAccept: () => void }) {
-  const [hasReadAll, setHasReadAll] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
-  const [showStorage, setShowStorage] = useState(false);
+interface ConsentModalProps {
+  onAccept: () => void;
+}
+
+function ConsentModal({ onAccept }: ConsentModalProps) {
+  const [agreed, setAgreed] = useState(false);
+
+  const handleAccept = () => {
+    if (!agreed) return;
+    onAccept();
+  };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(5, 9, 20, 0.95)', backdropFilter: 'blur(12px)' }}>
-      <div className="glass-panel p-6 md:p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-[#00d4ff] to-[#a855f7] flex items-center justify-center">
-            <i className="fa-solid fa-shield-halved text-white text-2xl"></i>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto glass-panel border border-[#1e3a5f] rounded-2xl shadow-2xl">
+
+        {/* Header */}
+        <div className="p-6 sm:p-8 border-b border-[#1a2a4a]">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-[#00d4ff] to-[#a855f7] flex items-center justify-center">
+              <i className="fa-solid fa-shield-halved text-white text-xl"></i>
+            </div>
+
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">
+                Privacy & Consent
+              </h2>
+
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Before using VoxForensics, please review and accept
+                the following terms regarding audio analysis and data
+                handling.
+              </p>
+            </div>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Voice Data Usage Agreement</h2>
-          <p className="text-sm text-gray-400">Please read the following before using our service</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20 mb-6">
-          <p className="text-sm text-[#00d4ff] font-semibold mb-2">🔒 Your Privacy Matters</p>
-          <p className="text-xs text-gray-300">
-            VoxForensics processes voice recordings to detect AI-generated deepfake audio. 
-            All processing happens locally in your browser. No data is sent to external servers.
-          </p>
-        </div>
+        {/* Consent Content */}
+        <div className="p-6 sm:p-8 space-y-6">
 
-        <div className="space-y-4 mb-6">
-          <div className="p-4 rounded-xl bg-[#0a1128]/40 border border-[#1a2a4a]">
-            <h3 className="text-sm font-semibold text-white mb-2">🎙️ Voice Data Usage</h3>
-            <p className="text-xs text-gray-300">
-              Your voice recordings are processed locally for deepfake detection. We extract acoustic features 
-              (pitch, formants, spectral analysis) but never store or transmit your actual audio.
+          {/* Audio Processing */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
+                <i className="fa-solid fa-microphone-lines text-[#00d4ff] text-sm"></i>
+              </div>
+
+              <h3 className="text-base font-semibold text-white">
+                Audio Processing
+              </h3>
+            </div>
+
+            <p className="text-sm text-gray-400 leading-relaxed pl-11">
+              Audio files uploaded or recorded through VoxForensics
+              may be processed by the application to detect signs of
+              synthetic or manipulated speech.
             </p>
           </div>
 
-          <div className="rounded-xl bg-[#0a1128]/40 border border-[#1a2a4a] overflow-hidden">
-            <button
-              onClick={() => setShowPrivacy(!showPrivacy)}
-              className="w-full p-4 flex items-center justify-between text-left hover:bg-[#1a2a4a]/20 transition"
-            >
-              <h3 className="text-sm font-semibold text-white">🔐 Privacy Policy</h3>
-              <i className={`fa-solid fa-chevron-${showPrivacy ? 'up' : 'down'} text-gray-400`}></i>
-            </button>
-            {showPrivacy && (
-              <div className="p-4 pt-0 text-xs text-gray-300 space-y-2">
-                <p>• All processing occurs client-side in your browser</p>
-                <p>• No voice data is transmitted to external servers</p>
-                <p>• Analysis results stored only in your browser's localStorage</p>
-                <p>• You can delete all data at any time</p>
-                <p>• Compliant with GDPR, CCPA, BIPA regulations</p>
+          {/* Analysis */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#a855f7]/10 flex items-center justify-center">
+                <i className="fa-solid fa-brain text-[#a855f7] text-sm"></i>
               </div>
-            )}
-          </div>
 
-          <div className="rounded-xl bg-[#0a1128]/40 border border-[#1a2a4a] overflow-hidden">
-            <button
-              onClick={() => setShowTerms(!showTerms)}
-              className="w-full p-4 flex items-center justify-between text-left hover:bg-[#1a2a4a]/20 transition"
-            >
-              <h3 className="text-sm font-semibold text-white">📜 Terms of Service</h3>
-              <i className={`fa-solid fa-chevron-${showTerms ? 'up' : 'down'} text-gray-400`}></i>
-            </button>
-            {showTerms && (
-              <div className="p-4 pt-0 text-xs text-gray-300 space-y-2">
-                <p>• Only upload audio you have rights to process</p>
-                <p>• This is a detection tool, not legal evidence</p>
-                <p>• Must be 18+ or have parental consent</p>
-                <p>• AI detection has inherent limitations</p>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl bg-[#0a1128]/40 border border-[#1a2a4a] overflow-hidden">
-            <button
-              onClick={() => setShowStorage(!showStorage)}
-              className="w-full p-4 flex items-center justify-between text-left hover:bg-[#1a2a4a]/20 transition"
-            >
-              <h3 className="text-sm font-semibold text-white">📦 Data Storage</h3>
-              <i className={`fa-solid fa-chevron-${showStorage ? 'up' : 'down'} text-gray-400`}></i>
-            </button>
-            {showStorage && (
-              <div className="p-4 pt-0 text-xs text-gray-300 space-y-2">
-                <p>• Uploaded files: Processed in-memory, never stored</p>
-                <p>• Recordings: Processed immediately, not saved</p>
-                <p>• Analysis history: Stored in localStorage only</p>
-                <p>• No server storage, no cloud backup</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mb-6 p-4 rounded-xl bg-[#a855f7]/5 border border-[#a855f7]/20">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={hasReadAll}
-              onChange={(e) => setHasReadAll(e.target.checked)}
-              className="mt-1 w-4 h-4 rounded accent-[#a855f7]"
-            />
-            <div>
-              <p className="text-sm font-semibold text-white">I confirm I have read and understood</p>
-              <p className="text-xs text-gray-400">Please expand and read all sections above</p>
+              <h3 className="text-base font-semibold text-white">
+                AI Analysis
+              </h3>
             </div>
-          </label>
+
+            <p className="text-sm text-gray-400 leading-relaxed pl-11">
+              The system analyzes characteristics of the supplied
+              audio and provides an estimated classification. Results
+              should be treated as analytical assistance rather than
+              absolute proof that an audio recording is genuine or
+              manipulated.
+            </p>
+          </div>
+
+          {/* Data Storage */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
+                <i className="fa-solid fa-database text-[#00d4ff] text-sm"></i>
+              </div>
+
+              <h3 className="text-base font-semibold text-white">
+                Data & Storage
+              </h3>
+            </div>
+
+            <p className="text-sm text-gray-400 leading-relaxed pl-11">
+              Depending on the application's configuration, scan
+              information and analysis results may be stored locally
+              or on connected services for features such as scan
+              history and account management.
+            </p>
+          </div>
+
+          {/* Microphone */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#a855f7]/10 flex items-center justify-center">
+                <i className="fa-solid fa-microphone text-[#a855f7] text-sm"></i>
+              </div>
+
+              <h3 className="text-base font-semibold text-white">
+                Microphone Access
+              </h3>
+            </div>
+
+            <p className="text-sm text-gray-400 leading-relaxed pl-11">
+              If you use the recording feature, your browser may ask
+              for permission to access your microphone. Microphone
+              access is only required when you choose to record audio.
+            </p>
+          </div>
+
+          {/* User Responsibility */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
+                <i className="fa-solid fa-circle-info text-[#00d4ff] text-sm"></i>
+              </div>
+
+              <h3 className="text-base font-semibold text-white">
+                User Responsibility
+              </h3>
+            </div>
+
+            <p className="text-sm text-gray-400 leading-relaxed pl-11">
+              Only upload or record audio that you have the right and
+              permission to analyze. Do not use VoxForensics to
+              process private or confidential recordings without the
+              appropriate authorization.
+            </p>
+          </div>
+
+          {/* Agreement */}
+          <div className="pt-4 border-t border-[#1a2a4a]">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-1 w-4 h-4 accent-[#00d4ff] cursor-pointer"
+              />
+
+              <span className="text-sm text-gray-300 leading-relaxed group-hover:text-white transition">
+                I have read and understood the information above. I
+                consent to the processing of audio and related data as
+                described and agree to use VoxForensics responsibly.
+              </span>
+            </label>
+          </div>
         </div>
 
-        <div className="flex gap-3">
+        {/* Footer */}
+        <div className="p-6 sm:p-8 pt-0">
           <button
-            onClick={onAccept}
-            disabled={!hasReadAll}
-            className={`flex-1 neon-btn py-4 text-base font-semibold ${
-              !hasReadAll ? 'opacity-50 cursor-not-allowed' : 'neon-btn-primary'
+            onClick={handleAccept}
+            disabled={!agreed}
+            className={`w-full py-3.5 rounded-xl font-semibold transition-all ${
+              agreed
+                ? 'neon-btn neon-btn-primary text-white cursor-pointer'
+                : 'bg-[#111c32] text-gray-500 border border-[#1a2a4a] cursor-not-allowed'
             }`}
           >
-            ✅ I Agree
+            <i className="fa-solid fa-check mr-2"></i>
+            I Agree & Continue
           </button>
-        </div>
 
-        {!hasReadAll && (
-          <p className="text-xs text-gray-500 text-center mt-3">
-            Please confirm you have read the agreement
+          <p className="text-[11px] text-gray-500 text-center mt-3">
+            You can revoke your consent later through the application's
+            account or privacy controls.
           </p>
-        )}
+        </div>
       </div>
     </div>
   );
 }
+
+export default ConsentModal;

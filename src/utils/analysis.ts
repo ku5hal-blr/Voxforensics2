@@ -1,564 +1,3860 @@
-// Real AI analysis for deepfake audio detection
-export interface AnalysisResult {
-  isDeepfake: boolean;
-  confidence: number;
-  uncertainty: number;
-  probabilities: { real: number; deepfake: number; manipulated: number };
-  features: AcousticFeatures;
-  explanation: string[];
-  modelVersion: string;
-  timestamp: string;
-  audioDuration: number;
-  sampleRate: number;
-}
+/* ============================================================
+ * VoxForensics — Deepfake Audio Detector
+ * Acoustic Heuristic Engine v5.1 — APP COMPATIBILITY FIX
+ *
+ * IMPORTANT:
+ * - Browser-only heuristic analysis
+ * - No AI / ML / external API
+ * - Designed for project/demo use
+ * - NOT forensic-grade authentication
+ *
+ * v5.1:
+ * - Pitch tracking
+ * - Pitch contour regularity
+ * - Pitch repetition
+ * - Energy envelope analysis
+ * - Spectral movement analysis
+ * - Spectral entropy / peakiness
+ * - Harmonic stability
+ * - Voicing consistency
+ * - Micro-variation analysis
+ * - Temporal repetition
+ * - Segment consistency
+ * - Cross-feature relationships
+ * - Synthetic / natural / manipulation evidence
+ * - Sample reliability
+ * - Test agreement
+ * - Conservative confidence handling
+ *
+ * APP COMPATIBILITY:
+ * - analyzeAudio(AudioBuffer | null, filename, forceResult)
+ * - getScanHistory()
+ * - saveScanToHistory()
+ * - clearHistory()
+ * - AudioFeatures
+ * - AnalysisResult
+ * - ScanRecord
+ * ============================================================ */
 
-export interface AcousticFeatures {
+
+/* ============================================================
+ * PUBLIC TYPES
+ * ============================================================ */
+
+export interface AudioFeatures {
+  zeroCrossingRate: number;
+  rmsEnergy: number;
   spectralCentroid: number;
   spectralRolloff: number;
-  zeroCrossingRate: number;
-  mfccEnergy: number;
-  pitchVariability: number;
-  formantStability: number;
-  harmonicRatio: number;
-  temporalModulation: number;
   spectralFlatness: number;
-  chromaFeatures: number;
+  harmonicRatio: number;
+  pitchMean: number;
+  pitchVariation: number;
+  temporalModulation: number;
+  chromaStability: number;
+  formantStability: number;
 }
 
+export interface AnalysisDiagnostics {
+  pitchRegularity: number;
+  energyRegularity: number;
+  spectralRegularity: number;
+  harmonicConsistency: number;
+  microVariation: number;
+  temporalRepetition: number;
+  voicingConsistency: number;
+  segmentConsistency: number;
+
+  aiEvidence: number;
+  realEvidence: number;
+  manipulationEvidence: number;
+
+  sampleReliability: number;
+  testAgreement: number;
+
+  syntheticTests: number;
+  naturalTests: number;
+  manipulationTests: number;
+
+  totalFrames: number;
+  activeFrames: number;
+  voicedFrames: number;
+}
+
+
+/*
+ * IMPORTANT:
+ * App.tsx expects currentResult.isDeepfake.
+ *
+ * We preserve the richer v5.1 result information while adding
+ * the compatibility property used by the current UI.
+ */
+export interface AnalysisResult {
+  id: string;
+
+  isDeepfake: boolean;
+
+  verdict:
+    | "AI-Generated"
+    | "Real Voice"
+    | "Possibly Manipulated"
+    | "Inconclusive";
+
+  confidence: number;
+
+  features: AudioFeatures;
+
+  explanation: string;
+
+  timestamp: number;
+
+  diagnostics?: AnalysisDiagnostics;
+}
+
+
+/*
+ * App.tsx expects:
+ *
+ * record.result.isDeepfake
+ * record.filename
+ * record.timestamp
+ * record.duration
+ */
 export interface ScanRecord {
   id: string;
   filename: string;
   timestamp: string;
-  result: AnalysisResult;
   duration: number;
+  result: AnalysisResult;
 }
 
-// Extract real acoustic features from audio buffer
-function extractFeatures(audioBuffer: AudioBuffer): AcousticFeatures {
-  const channelData = audioBuffer.getChannelData(0);
-  const sampleRate = audioBuffer.sampleRate;
-  const length = channelData.length;
 
-  // Zero Crossing Rate
-  let zeroCrossings = 0;
-  const step = Math.max(1, Math.floor(length / 10000)); // Sample every N points for speed
-  let sampledLength = 0;
-  for (let i = step; i < length; i += step) {
-    if ((channelData[i] >= 0 && channelData[i - step] < 0) ||
-        (channelData[i] < 0 && channelData[i - step] >= 0)) {
-      zeroCrossings++;
-    }
-    sampledLength++;
-  }
-  const zeroCrossingRate = zeroCrossings / sampledLength;
+/* ============================================================
+ * CONSTANTS
+ * ============================================================ */
 
-  // RMS Energy
-  let sumSquares = 0;
-  for (let i = 0; i < length; i += step) {
-    sumSquares += channelData[i] * channelData[i];
-  }
-  const rmsEnergy = Math.sqrt(sumSquares / (length / step));
-  const mfccEnergy = 20 * Math.log10(rmsEnergy + 1e-10);
+const SAMPLE_RATE_FALLBACK = 44100;
 
-  // Spectral analysis using optimized FFT
-  const frameSize = 1024; // Smaller for speed
-  const numFrames = Math.floor(length / frameSize);
-  const maxFrames = Math.min(numFrames, 5); // Only analyze 5 frames for speed
-  
-  let spectralCentroidSum = 0;
-  let spectralRolloffSum = 0;
-  let spectralFlatnessSum = 0;
-  let harmonicEnergySum = 0;
-  let totalEnergySum = 0;
+const FRAME_SIZE = 1024;
+const HOP_SIZE = 256;
 
-  for (let frame = 0; frame < maxFrames; frame++) {
-    const start = frame * frameSize;
-    const frameData = channelData.slice(start, start + frameSize);
-    
-    // Optimized DFT - only compute key frequencies
-    const numFreqs = frameSize / 4; // Only compute quarter of frequencies
-    const magnitude: number[] = [];
-    for (let freq = 0; freq < numFreqs; freq++) {
-      let real = 0, imag = 0;
-      // Subsample time domain for speed
-      for (let t = 0; t < frameSize; t += 2) {
-        const angle = (2 * Math.PI * freq * t) / frameSize;
-        real += frameData[t] * Math.cos(angle);
-        imag -= frameData[t] * Math.sin(angle);
-      }
-      magnitude.push(Math.sqrt(real * real + imag * imag));
-    }
+const MAX_FRAMES = 160;
 
-    // Spectral centroid
-    let weightedSum = 0;
-    let magnitudeSum = 0;
-    for (let i = 0; i < magnitude.length; i++) {
-      weightedSum += i * magnitude[i];
-      magnitudeSum += magnitude[i];
-    }
-    const centroid = magnitudeSum > 0 ? (weightedSum / magnitudeSum) * (sampleRate / frameSize) : 0;
-    spectralCentroidSum += centroid;
+const MIN_ANALYSIS_FRAMES = 12;
+const MIN_ACTIVE_FRAMES = 8;
+const MIN_VOICED_FRAMES = 6;
 
-    // Spectral rolloff (85% energy)
-    const threshold = magnitudeSum * 0.85;
-    let cumulative = 0;
-    let rolloff = 0;
-    for (let i = 0; i < magnitude.length; i++) {
-      cumulative += magnitude[i];
-      if (cumulative >= threshold) {
-        rolloff = i * (sampleRate / frameSize);
-        break;
-      }
-    }
-    spectralRolloffSum += rolloff;
+const EPSILON = 1e-10;
 
-    // Spectral flatness (geometric mean / arithmetic mean)
-    let logSum = 0;
-    let arithmeticSum = 0;
-    for (let i = 0; i < magnitude.length; i++) {
-      if (magnitude[i] > 0) {
-        logSum += Math.log(magnitude[i]);
-      }
-      arithmeticSum += magnitude[i];
-    }
-    const geometricMean = Math.exp(logSum / magnitude.length);
-    const arithmeticMean = arithmeticSum / magnitude.length;
-    const flatness = arithmeticMean > 0 ? geometricMean / arithmeticMean : 0;
-    spectralFlatnessSum += flatness;
+const MIN_PITCH = 70;
+const MAX_PITCH = 500;
 
-    // Harmonic ratio (simplified)
-    let maxMag = 0;
-    let maxIdx = 0;
-    for (let i = 1; i < magnitude.length; i++) {
-      if (magnitude[i] > maxMag) {
-        maxMag = magnitude[i];
-        maxIdx = i;
-      }
-    }
-    
-    // Check for harmonics
-    let harmonicEnergy = maxMag;
-    for (let h = 2; h <= 5; h++) {
-      const harmonicIdx = maxIdx * h;
-      if (harmonicIdx < magnitude.length) {
-        harmonicEnergy += magnitude[harmonicIdx] * 0.5;
-      }
-    }
-    const totalEnergy = magnitude.reduce((a, b) => a + b, 0);
-    harmonicEnergySum += harmonicEnergy;
-    totalEnergySum += totalEnergy;
+
+/* ============================================================
+ * GENERIC HELPERS
+ * ============================================================ */
+
+function clamp(
+  value: number,
+  min = 0,
+  max = 1
+): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+
+function safeNumber(
+  value: number,
+  fallback = 0
+): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+
+function mean(values: number[]): number {
+  if (!values.length) return 0;
+
+  let total = 0;
+
+  for (const value of values) {
+    total += value;
   }
 
-  const validFrames = Math.min(numFrames, 10);
-  const spectralCentroid = spectralCentroidSum / validFrames;
-  const spectralRolloff = spectralRolloffSum / validFrames;
-  const spectralFlatness = spectralFlatnessSum / validFrames;
-  const harmonicRatio = totalEnergySum > 0 ? harmonicEnergySum / totalEnergySum : 0;
+  return total / values.length;
+}
 
-  // Pitch variability (simplified autocorrelation-based)
-  const pitches: number[] = [];
-  const windowSize = Math.floor(sampleRate * 0.05); // 50ms windows
-  const hopSize = Math.floor(sampleRate * 0.02); // 20ms hop
-  
-  for (let pos = 0; pos < length - windowSize; pos += hopSize) {
-    const window = channelData.slice(pos, pos + windowSize);
-    
-    // Autocorrelation for pitch detection
-    let maxCorr = 0;
-    let bestLag = 0;
-    const minLag = Math.floor(sampleRate / 500); // 500 Hz max
-    const maxLag = Math.floor(sampleRate / 50);  // 50 Hz min
-    
-    for (let lag = minLag; lag < Math.min(maxLag, windowSize / 2); lag++) {
-      let corr = 0;
-      for (let i = 0; i < windowSize - lag; i++) {
-        corr += window[i] * window[i + lag];
+
+function variance(values: number[]): number {
+  if (values.length < 2) return 0;
+
+  const m = mean(values);
+
+  let total = 0;
+
+  for (const value of values) {
+    const difference = value - m;
+    total += difference * difference;
+  }
+
+  return total / values.length;
+}
+
+
+function standardDeviation(values: number[]): number {
+  return Math.sqrt(Math.max(0, variance(values)));
+}
+
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+
+  const sorted = [...values].sort(
+    (a, b) => a - b
+  );
+
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 0) {
+    return (
+      (sorted[middle - 1] + sorted[middle]) /
+      2
+    );
+  }
+
+  return sorted[middle];
+}
+
+
+function percentile(
+  values: number[],
+  p: number
+): number {
+  if (!values.length) return 0;
+
+  const sorted = [...values].sort(
+    (a, b) => a - b
+  );
+
+  const position =
+    clamp(p, 0, 1) * (sorted.length - 1);
+
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+
+  if (lower === upper) {
+    return sorted[lower];
+  }
+
+  const weight = position - lower;
+
+  return (
+    sorted[lower] * (1 - weight) +
+    sorted[upper] * weight
+  );
+}
+
+
+function coefficientOfVariation(
+  values: number[]
+): number {
+  const m = Math.abs(mean(values));
+
+  if (m < EPSILON) return 0;
+
+  return standardDeviation(values) / m;
+}
+
+
+function normalizeArray(
+  values: number[]
+): number[] {
+  if (!values.length) return [];
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+
+  if (Math.abs(max - min) < EPSILON) {
+    return values.map(() => 0.5);
+  }
+
+  return values.map(
+    value => (value - min) / (max - min)
+  );
+}
+
+
+function correlation(
+  a: number[],
+  b: number[]
+): number {
+  const length = Math.min(a.length, b.length);
+
+  if (length < 2) return 0;
+
+  const aSlice = a.slice(0, length);
+  const bSlice = b.slice(0, length);
+
+  const meanA = mean(aSlice);
+  const meanB = mean(bSlice);
+
+  let numerator = 0;
+  let denominatorA = 0;
+  let denominatorB = 0;
+
+  for (let i = 0; i < length; i++) {
+    const da = aSlice[i] - meanA;
+    const db = bSlice[i] - meanB;
+
+    numerator += da * db;
+    denominatorA += da * da;
+    denominatorB += db * db;
+  }
+
+  const denominator =
+    Math.sqrt(denominatorA * denominatorB);
+
+  if (denominator < EPSILON) return 0;
+
+  return clamp(
+    numerator / denominator,
+    -1,
+    1
+  );
+}
+
+
+function averageAbsoluteDifference(
+  values: number[]
+): number {
+  if (values.length < 2) return 0;
+
+  let total = 0;
+
+  for (let i = 1; i < values.length; i++) {
+    total += Math.abs(
+      values[i] - values[i - 1]
+    );
+  }
+
+  return total / (values.length - 1);
+}
+
+
+function relativeDifferences(
+  values: number[]
+): number[] {
+  if (values.length < 2) return [];
+
+  const differences: number[] = [];
+
+  for (let i = 1; i < values.length; i++) {
+    const denominator =
+      Math.abs(values[i - 1]) + EPSILON;
+
+    differences.push(
+      Math.abs(values[i] - values[i - 1]) /
+      denominator
+    );
+  }
+
+  return differences;
+}
+
+
+function entropyFromHistogram(
+  values: number[],
+  bins = 10
+): number {
+  if (!values.length) return 0;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+
+  if (Math.abs(max - min) < EPSILON) {
+    return 0;
+  }
+
+  const histogram = new Array(bins).fill(0);
+
+  for (const value of values) {
+    const normalized =
+      (value - min) / (max - min);
+
+    const index = Math.min(
+      bins - 1,
+      Math.floor(normalized * bins)
+    );
+
+    histogram[index]++;
+  }
+
+  let entropy = 0;
+
+  for (const count of histogram) {
+    if (!count) continue;
+
+    const probability =
+      count / values.length;
+
+    entropy -=
+      probability *
+      Math.log2(probability);
+  }
+
+  const maximumEntropy =
+    Math.log2(bins);
+
+  if (maximumEntropy <= 0) return 0;
+
+  return clamp(
+    entropy / maximumEntropy
+  );
+}
+
+
+function autocorrelationAtLag(
+  values: number[],
+  lag: number
+): number {
+  if (
+    lag <= 0 ||
+    values.length <= lag
+  ) {
+    return 0;
+  }
+
+  const a = values.slice(0, values.length - lag);
+  const b = values.slice(lag);
+
+  return correlation(a, b);
+}
+
+
+/* ============================================================
+ * WINDOW
+ * ============================================================ */
+
+function createHannWindow(
+  size: number
+): Float64Array {
+  const window = new Float64Array(size);
+
+  for (let i = 0; i < size; i++) {
+    window[i] =
+      0.5 *
+      (
+        1 -
+        Math.cos(
+          (2 * Math.PI * i) /
+          (size - 1)
+        )
+      );
+  }
+
+  return window;
+}
+
+
+const HANN_WINDOW =
+  createHannWindow(FRAME_SIZE);
+
+
+/* ============================================================
+ * FFT
+ * ============================================================ */
+
+function fft(
+  input: Float64Array
+): {
+  real: Float64Array;
+  imag: Float64Array;
+} {
+  const n = input.length;
+
+  const real = new Float64Array(input);
+  const imag = new Float64Array(n);
+
+  let j = 0;
+
+  for (let i = 1; i < n; i++) {
+    let bit = n >> 1;
+
+    while (j & bit) {
+      j ^= bit;
+      bit >>= 1;
+    }
+
+    j ^= bit;
+
+    if (i < j) {
+      const temp = real[i];
+
+      real[i] = real[j];
+      real[j] = temp;
+    }
+  }
+
+  for (
+    let length = 2;
+    length <= n;
+    length <<= 1
+  ) {
+    const angle =
+      (-2 * Math.PI) / length;
+
+    const wReal =
+      Math.cos(angle);
+
+    const wImag =
+      Math.sin(angle);
+
+    for (
+      let i = 0;
+      i < n;
+      i += length
+    ) {
+      let currentReal = 1;
+      let currentImag = 0;
+
+      const half = length >> 1;
+
+      for (
+        let k = 0;
+        k < half;
+        k++
+      ) {
+        const evenIndex = i + k;
+        const oddIndex =
+          evenIndex + half;
+
+        const oddReal =
+          real[oddIndex];
+        const oddImag =
+          imag[oddIndex];
+
+        const transformedReal =
+          currentReal * oddReal -
+          currentImag * oddImag;
+
+        const transformedImag =
+          currentReal * oddImag +
+          currentImag * oddReal;
+
+        real[oddIndex] =
+          real[evenIndex] -
+          transformedReal;
+
+        imag[oddIndex] =
+          imag[evenIndex] -
+          transformedImag;
+
+        real[evenIndex] +=
+          transformedReal;
+
+        imag[evenIndex] +=
+          transformedImag;
+
+        const nextReal =
+          currentReal * wReal -
+          currentImag * wImag;
+
+        currentImag =
+          currentReal * wImag +
+          currentImag * wReal;
+
+        currentReal =
+          nextReal;
       }
-      if (corr > maxCorr) {
-        maxCorr = corr;
-        bestLag = lag;
-      }
-    }
-    
-    if (bestLag > 0) {
-      const pitch = sampleRate / bestLag;
-      pitches.push(pitch);
     }
   }
-
-  // Calculate pitch variability
-  let pitchVariability = 0;
-  if (pitches.length > 2) {
-    const meanPitch = pitches.reduce((a, b) => a + b, 0) / pitches.length;
-    const variance = pitches.reduce((sum, p) => sum + Math.pow(p - meanPitch, 2), 0) / pitches.length;
-    pitchVariability = Math.sqrt(variance) / meanPitch;
-  }
-
-  // Formant stability (simplified - variance of spectral peaks)
-  const formantStability = 1 - spectralFlatness * 2; // Inverse relationship
-
-  // Temporal modulation (energy variation over time)
-  const frameEnergies: number[] = [];
-  const modFrameSize = Math.floor(sampleRate * 0.02); // 20ms frames
-  for (let i = 0; i < length; i += modFrameSize) {
-    let energy = 0;
-    for (let j = i; j < Math.min(i + modFrameSize, length); j++) {
-      energy += channelData[j] * channelData[j];
-    }
-    frameEnergies.push(Math.sqrt(energy / modFrameSize));
-  }
-  
-  let temporalModulation = 0;
-  if (frameEnergies.length > 1) {
-    const meanEnergy = frameEnergies.reduce((a, b) => a + b, 0) / frameEnergies.length;
-    const variance = frameEnergies.reduce((sum, e) => sum + Math.pow(e - meanEnergy, 2), 0) / frameEnergies.length;
-    temporalModulation = Math.sqrt(variance) / (meanEnergy + 1e-10);
-  }
-
-  // Chroma features (simplified)
-  const chromaFeatures = harmonicRatio * 0.8 + (1 - spectralFlatness) * 0.2;
 
   return {
-    spectralCentroid,
-    spectralRolloff,
-    zeroCrossingRate,
-    mfccEnergy,
-    pitchVariability,
-    formantStability: Math.max(0, Math.min(1, formantStability)),
-    harmonicRatio,
-    temporalModulation,
-    spectralFlatness,
-    chromaFeatures,
+    real,
+    imag,
   };
 }
 
-// Analyze features to determine if deepfake
-function analyzeFeatures(features: AcousticFeatures): { isDeepfake: boolean; confidence: number } {
-  let deepfakeScore = 0;
-  let realScore = 0;
 
-  // 1. Pitch variability - AI voices have MUCH less natural variation
-  // Real human speech: 0.15-0.60, AI voices: 0.02-0.12
-  // RELAXED: Many real voices (calm speakers, monotone) can have 0.15-0.25
-  if (features.pitchVariability < 0.05) {
-    deepfakeScore += 4.0; // Very strong indicator
-  } else if (features.pitchVariability < 0.08) {
-    deepfakeScore += 3.0;
-  } else if (features.pitchVariability < 0.12) {
-    deepfakeScore += 2.0;
-  } else if (features.pitchVariability > 0.25) {
-    realScore += 2.5; // Very natural variation
-  } else if (features.pitchVariability > 0.18) {
-    realScore += 1.5;
-  }
+/* ============================================================
+ * FRAME TYPE
+ * ============================================================ */
 
-  // 2. Formant stability - AI voices are unnaturally stable
-  // Real speech: 0.45-0.85, AI voices: 0.88-0.99
-  // RELAXED: Professional speakers can have 0.75-0.85 stability
-  if (features.formantStability > 0.95) {
-    deepfakeScore += 3.5;
-  } else if (features.formantStability > 0.90) {
-    deepfakeScore += 2.5;
-  } else if (features.formantStability > 0.85) {
-    deepfakeScore += 1.5;
-  } else if (features.formantStability < 0.60) {
-    realScore += 2.5;
-  } else if (features.formantStability < 0.70) {
-    realScore += 1.5;
-  }
+interface FrameAnalysis {
+  rms: number;
+  zcr: number;
 
-  // 3. Spectral flatness - AI voices have higher flatness due to vocoder artifacts
-  // Real speech: 0.01-0.08, AI voices: 0.08-0.20
-  // RELAXED: Real recordings with noise/room acoustics can have 0.05-0.10
-  if (features.spectralFlatness > 0.15) {
-    deepfakeScore += 3.5;
-  } else if (features.spectralFlatness > 0.12) {
-    deepfakeScore += 2.5;
-  } else if (features.spectralFlatness > 0.09) {
-    deepfakeScore += 1.5;
-  } else if (features.spectralFlatness < 0.03) {
-    realScore += 2.5;
-  } else if (features.spectralFlatness < 0.05) {
-    realScore += 1.5;
-  }
+  centroid: number;
+  rolloff: number;
 
-  // 4. Harmonic ratio - AI voices have lower/distorted harmonic content
-  // Real speech: 0.65-0.95, AI voices: 0.40-0.68
-  // RELAXED: Breathy voices can have 0.65-0.75 harmonic ratio
-  if (features.harmonicRatio < 0.50) {
-    deepfakeScore += 3.5;
-  } else if (features.harmonicRatio < 0.58) {
-    deepfakeScore += 2.5;
-  } else if (features.harmonicRatio < 0.65) {
-    deepfakeScore += 1.5;
-  } else if (features.harmonicRatio > 0.80) {
-    realScore += 2.5;
-  } else if (features.harmonicRatio > 0.72) {
-    realScore += 1.5;
-  }
+  flatness: number;
+  entropy: number;
+  peakiness: number;
 
-  // 5. Temporal modulation - AI voices lack natural breathing and micro-pauses
-  // Real speech: 0.35-0.95, AI voices: 0.15-0.40
-  // RELAXED: Steady speakers can have 0.35-0.50 modulation
-  if (features.temporalModulation < 0.20) {
-    deepfakeScore += 3.5;
-  } else if (features.temporalModulation < 0.28) {
-    deepfakeScore += 2.5;
-  } else if (features.temporalModulation < 0.35) {
-    deepfakeScore += 1.5;
-  } else if (features.temporalModulation > 0.60) {
-    realScore += 2.5;
-  } else if (features.temporalModulation > 0.45) {
-    realScore += 1.5;
-  }
+  pitch: number;
+  pitchConfidence: number;
 
-  // 6. Zero crossing rate - AI voices can have abnormal ZCR patterns
-  // RELAXED: Real recordings with noise can have higher ZCR
-  if (features.zeroCrossingRate > 0.10) {
-    deepfakeScore += 2.0;
-  } else if (features.zeroCrossingRate > 0.08) {
-    deepfakeScore += 1.2;
-  } else if (features.zeroCrossingRate < 0.02) {
-    realScore += 1.5;
-  }
+  harmonicRatio: number;
 
-  // 7. Spectral centroid - AI voices often have unnatural spectral balance
-  // RELAXED: Wider range for real voices
-  if (features.spectralCentroid > 3500 || features.spectralCentroid < 1400) {
-    deepfakeScore += 1.5;
-  } else if (features.spectralCentroid > 3000 || features.spectralCentroid < 1600) {
-    deepfakeScore += 0.8;
-  }
+  chroma: number[];
 
-  // 8. Cross-feature consistency check - CRITICAL FOR MIXED AUDIO DETECTION
-  // Count how many features STRONGLY indicate deepfake (using stricter thresholds)
-  const deepfakeIndicators = [
-    features.pitchVariability < 0.10,
-    features.formantStability > 0.88,
-    features.spectralFlatness > 0.10,
-    features.harmonicRatio < 0.60,
-    features.temporalModulation < 0.30,
-    features.zeroCrossingRate > 0.08,
-  ].filter(Boolean).length;
-
-  // If 5+ features strongly indicate deepfake, it's almost certainly AI
-  if (deepfakeIndicators >= 5) {
-    deepfakeScore += 4.0; // Very strong multi-feature confirmation
-  } else if (deepfakeIndicators >= 4) {
-    deepfakeScore += 2.0;
-  }
-
-  // Count real indicators (using relaxed thresholds)
-  const realIndicators = [
-    features.pitchVariability > 0.20,
-    features.formantStability < 0.75,
-    features.spectralFlatness < 0.06,
-    features.harmonicRatio > 0.75,
-    features.temporalModulation > 0.50,
-    features.zeroCrossingRate < 0.05,
-  ].filter(Boolean).length;
-
-  if (realIndicators >= 5) {
-    realScore += 3.5;
-  } else if (realIndicators >= 4) {
-    realScore += 2.0;
-  } else if (realIndicators >= 3) {
-    realScore += 1.0;
-  }
-
-  // Calculate final verdict with HIGHER threshold to reduce false positives
-  const totalScore = deepfakeScore + realScore;
-  const deepfakeRatio = totalScore > 0 ? deepfakeScore / totalScore : 0.5;
-  
-  // RELAXED: Require stronger evidence to classify as deepfake
-  // This reduces false positives for real voices
-  const isDeepfake = deepfakeScore > 5.0 || deepfakeRatio > 0.55;
-  
-  // Confidence calculation
-  let confidence: number;
-  if (isDeepfake) {
-    if (deepfakeScore > 12) confidence = 0.96;
-    else if (deepfakeScore > 9) confidence = 0.92;
-    else if (deepfakeScore > 7) confidence = 0.86;
-    else if (deepfakeScore > 5) confidence = 0.78;
-    else confidence = 0.68;
-  } else {
-    if (realScore > 8) confidence = 0.94;
-    else if (realScore > 5) confidence = 0.87;
-    else if (realScore > 3) confidence = 0.78;
-    else confidence = 0.65;
-  }
-
-  return { isDeepfake, confidence };
+  spectralFlux: number;
 }
 
-// Generate explanation based on features
-function generateExplanation(features: AcousticFeatures, isDeepfake: boolean): string[] {
-  const explanations: string[] = [];
-  
-  if (isDeepfake) {
-    if (features.pitchVariability < 0.18) {
-      explanations.push('⚠️ Unnatural pitch consistency detected — human speech typically shows more micro-variations in fundamental frequency');
-    }
-    if (features.formantStability > 0.85) {
-      explanations.push('⚠️ Formant transitions are unusually stable — suggests synthetic vocal tract modeling');
-    }
-    if (features.temporalModulation < 0.45) {
-      explanations.push('⚠️ Reduced temporal modulation energy — indicates missing natural breath patterns and micro-pauses');
-    }
-    if (features.spectralFlatness > 0.07) {
-      explanations.push('⚠️ Elevated spectral flatness — characteristic of vocoder-based synthesis artifacts');
-    }
-    if (features.harmonicRatio < 0.7) {
-      explanations.push('⚠️ Lower harmonic-to-noise ratio — suggests phase discontinuities from neural vocoder output');
-    }
-    if (features.zeroCrossingRate > 0.05) {
-      explanations.push('⚠️ High zero-crossing rate — indicates synthetic noise patterns typical of AI-generated audio');
-    }
-    explanations.push('🔬 Spectral analysis reveals artifacts consistent with neural audio codec reconstruction');
-  } else {
-    if (features.pitchVariability > 0.2) {
-      explanations.push('✅ Natural pitch variability detected — consistent with organic vocal cord vibration patterns');
-    }
-    if (features.formantStability < 0.8) {
-      explanations.push('✅ Formant transitions show natural coarticulation effects — typical of human speech production');
-    }
-    if (features.temporalModulation > 0.4) {
-      explanations.push('✅ Normal temporal modulation profile — includes natural breathing patterns and prosodic variation');
-    }
-    if (features.spectralFlatness < 0.06) {
-      explanations.push('✅ Low spectral flatness — indicates clean harmonic structure from natural voice source');
-    }
-    if (features.harmonicRatio > 0.7) {
-      explanations.push('✅ High harmonic-to-noise ratio — consistent with clean glottal excitation');
-    }
-    explanations.push('🔬 No synthetic artifacts detected in spectral domain — audio appears to be from natural recording');
-  }
-  
-  return explanations;
-}
 
-// Main analysis function
-export async function analyzeAudio(
-  audioBuffer: AudioBuffer | null,
-  filename: string,
-  forceResult?: 'real' | 'fake',
-  customFeatures?: AcousticFeatures
-): Promise<AnalysisResult> {
-  // Simulate processing time
-  await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+/* ============================================================
+ * PITCH DETECTION
+ * ============================================================ */
 
-  let features: AcousticFeatures;
-  let isDeepfake: boolean;
-  let confidence: number;
+function detectPitch(
+  frame: Float64Array,
+  sampleRate: number
+): {
+  pitch: number;
+  confidence: number;
+} {
+  const minLag =
+    Math.floor(
+      sampleRate / MAX_PITCH
+    );
 
-  if (customFeatures) {
-    // Use custom features for testing
-    features = customFeatures;
-    const analysis = analyzeFeatures(features);
-    isDeepfake = analysis.isDeepfake;
-    confidence = analysis.confidence;
-  } else if (audioBuffer) {
-    // Extract real features from audio
-    features = extractFeatures(audioBuffer);
-    
-    if (forceResult) {
-      isDeepfake = forceResult === 'fake';
-      confidence = 0.75 + Math.random() * 0.2;
-    } else {
-      // Analyze features to determine if deepfake
-      const analysis = analyzeFeatures(features);
-      isDeepfake = analysis.isDeepfake;
-      confidence = analysis.confidence;
-    }
-  } else {
-    // Fallback for empty/simulated files
-    if (forceResult) {
-      isDeepfake = forceResult === 'fake';
-    } else if (filename.toLowerCase().includes('fake') || filename.toLowerCase().includes('deepfake')) {
-      isDeepfake = true;
-    } else if (filename.toLowerCase().includes('real') || filename.toLowerCase().includes('genuine')) {
-      isDeepfake = false;
-    } else {
-      isDeepfake = Math.random() > 0.5;
-    }
-    confidence = 0.7 + Math.random() * 0.25;
-    
-    // Generate simulated features
-    features = isDeepfake ? {
-      spectralCentroid: 2800 + Math.random() * 400,
-      spectralRolloff: 5200 + Math.random() * 300,
-      zeroCrossingRate: 0.04 + Math.random() * 0.02,
-      mfccEnergy: -15 + Math.random() * 5,
-      pitchVariability: 0.12 + Math.random() * 0.08,
-      formantStability: 0.85 + Math.random() * 0.1,
-      harmonicRatio: 0.72 + Math.random() * 0.1,
-      temporalModulation: 0.35 + Math.random() * 0.15,
-      spectralFlatness: 0.08 + Math.random() * 0.06,
-      chromaFeatures: 0.6 + Math.random() * 0.15,
-    } : {
-      spectralCentroid: 2200 + Math.random() * 600,
-      spectralRolloff: 4800 + Math.random() * 800,
-      zeroCrossingRate: 0.02 + Math.random() * 0.03,
-      mfccEnergy: -20 + Math.random() * 8,
-      pitchVariability: 0.25 + Math.random() * 0.2,
-      formantStability: 0.65 + Math.random() * 0.15,
-      harmonicRatio: 0.85 + Math.random() * 0.1,
-      temporalModulation: 0.55 + Math.random() * 0.2,
-      spectralFlatness: 0.03 + Math.random() * 0.04,
-      chromaFeatures: 0.75 + Math.random() * 0.15,
+  const maxLag =
+    Math.min(
+      Math.floor(
+        sampleRate / MIN_PITCH
+      ),
+      frame.length - 2
+    );
+
+  if (maxLag <= minLag) {
+    return {
+      pitch: 0,
+      confidence: 0,
     };
   }
 
-  const explanation = generateExplanation(features, isDeepfake);
+  let energy = 0;
 
-  const result: AnalysisResult = {
-    isDeepfake,
-    confidence,
-    uncertainty: 1 - confidence,
-    probabilities: isDeepfake 
-      ? { real: 0.05 + Math.random() * 0.1, deepfake: confidence * 0.85, manipulated: confidence * 0.15 + Math.random() * 0.05 }
-      : { real: confidence * 0.9, deepfake: 0.03 + Math.random() * 0.07, manipulated: 0.02 + Math.random() * 0.05 },
-    features,
-    explanation,
-    modelVersion: 'VoxNet-v3.2.1-Ensemble',
-    timestamp: new Date().toISOString(),
-    audioDuration: audioBuffer ? audioBuffer.duration : 3 + Math.random() * 7,
-    sampleRate: audioBuffer ? audioBuffer.sampleRate : 44100,
+  for (const sample of frame) {
+    energy += sample * sample;
+  }
+
+  if (
+    energy <
+    frame.length * 0.000001
+  ) {
+    return {
+      pitch: 0,
+      confidence: 0,
+    };
+  }
+
+  let bestLag = -1;
+  let bestCorrelation = 0;
+
+  for (
+    let lag = minLag;
+    lag <= maxLag;
+    lag++
+  ) {
+    let numerator = 0;
+    let energyA = 0;
+    let energyB = 0;
+
+    const limit =
+      frame.length - lag;
+
+    for (let i = 0; i < limit; i++) {
+      const a = frame[i];
+      const b = frame[i + lag];
+
+      numerator += a * b;
+      energyA += a * a;
+      energyB += b * b;
+    }
+
+    const denominator =
+      Math.sqrt(
+        energyA * energyB
+      );
+
+    if (
+      denominator <
+      EPSILON
+    ) {
+      continue;
+    }
+
+    const value =
+      numerator / denominator;
+
+    if (
+      value > bestCorrelation
+    ) {
+      bestCorrelation = value;
+      bestLag = lag;
+    }
+  }
+
+  if (
+    bestLag < 0 ||
+    bestCorrelation < 0.22
+  ) {
+    return {
+      pitch: 0,
+      confidence: 0,
+    };
+  }
+
+  /*
+   * Parabolic interpolation around the best lag.
+   */
+  let refinedLag = bestLag;
+
+  if (
+    bestLag > minLag &&
+    bestLag < maxLag
+  ) {
+    const correlationAtLag = (
+      lag: number
+    ): number => {
+      let numerator = 0;
+      let energyA = 0;
+      let energyB = 0;
+
+      const limit =
+        frame.length - lag;
+
+      for (let i = 0; i < limit; i++) {
+        const a = frame[i];
+        const b = frame[i + lag];
+
+        numerator += a * b;
+        energyA += a * a;
+        energyB += b * b;
+      }
+
+      const denominator =
+        Math.sqrt(
+          energyA * energyB
+        );
+
+      if (
+        denominator <
+        EPSILON
+      ) {
+        return 0;
+      }
+
+      return numerator / denominator;
+    };
+
+    const left =
+      correlationAtLag(
+        bestLag - 1
+      );
+
+    const center =
+      correlationAtLag(
+        bestLag
+      );
+
+    const right =
+      correlationAtLag(
+        bestLag + 1
+      );
+
+    const denominator =
+      left -
+      2 * center +
+      right;
+
+    if (
+      Math.abs(denominator) >
+      EPSILON
+    ) {
+      const shift =
+        0.5 *
+        (left - right) /
+        denominator;
+
+      if (
+        Math.abs(shift) <= 1
+      ) {
+        refinedLag += shift;
+      }
+    }
+  }
+
+  if (
+    refinedLag <= 0
+  ) {
+    return {
+      pitch: 0,
+      confidence: 0,
+    };
+  }
+
+  const pitch =
+    sampleRate / refinedLag;
+
+  if (
+    pitch < MIN_PITCH ||
+    pitch > MAX_PITCH
+  ) {
+    return {
+      pitch: 0,
+      confidence: 0,
+    };
+  }
+
+  return {
+    pitch,
+    confidence:
+      clamp(
+        (bestCorrelation - 0.15) /
+        0.75
+      ),
   };
-
-  return result;
 }
 
-// Get scan history from localStorage
-export function getScanHistory(): ScanRecord[] {
+
+/* ============================================================
+ * HARMONIC RATIO
+ * ============================================================ */
+
+function calculateHarmonicRatio(
+  magnitudes: number[],
+  pitch: number,
+  sampleRate: number
+): number {
+  if (
+    pitch <= 0 ||
+    !magnitudes.length
+  ) {
+    return 0;
+  }
+
+  const binWidth =
+    sampleRate / FRAME_SIZE;
+
+  let harmonicEnergy = 0;
+  let totalEnergy = 0;
+
+  for (const magnitude of magnitudes) {
+    totalEnergy +=
+      magnitude * magnitude;
+  }
+
+  if (
+    totalEnergy <
+    EPSILON
+  ) {
+    return 0;
+  }
+
+  for (
+    let harmonic = 1;
+    harmonic <= 8;
+    harmonic++
+  ) {
+    const frequency =
+      pitch * harmonic;
+
+    if (
+      frequency >=
+      sampleRate / 2
+    ) {
+      break;
+    }
+
+    const centerBin =
+      Math.round(
+        frequency / binWidth
+      );
+
+    for (
+      let offset = -1;
+      offset <= 1;
+      offset++
+    ) {
+      const index =
+        centerBin + offset;
+
+      if (
+        index >= 0 &&
+        index < magnitudes.length
+      ) {
+        harmonicEnergy +=
+          magnitudes[index] *
+          magnitudes[index];
+      }
+    }
+  }
+
+  return clamp(
+    harmonicEnergy /
+    totalEnergy
+  );
+}
+
+
+/* ============================================================
+ * CHROMA
+ * ============================================================ */
+
+function calculateChroma(
+  magnitudes: number[],
+  sampleRate: number
+): number[] {
+  const chroma =
+    new Array(12).fill(0);
+
+  const binWidth =
+    sampleRate / FRAME_SIZE;
+
+  for (
+    let i = 1;
+    i < magnitudes.length;
+    i++
+  ) {
+    const frequency =
+      i * binWidth;
+
+    if (
+      frequency < 70 ||
+      frequency > 4000
+    ) {
+      continue;
+    }
+
+    const midi =
+      69 +
+      12 *
+      Math.log2(
+        frequency / 440
+      );
+
+    const pitchClass =
+      (
+        Math.round(midi) %
+        12 +
+        12
+      ) % 12;
+
+    chroma[pitchClass] +=
+      magnitudes[i];
+  }
+
+  const total =
+    chroma.reduce(
+      (sum, value) =>
+        sum + value,
+      0
+    );
+
+  if (
+    total < EPSILON
+  ) {
+    return chroma;
+  }
+
+  return chroma.map(
+    value => value / total
+  );
+}
+
+
+/* ============================================================
+ * FRAME ANALYSIS
+ * ============================================================ */
+
+function analyzeFrame(
+  frameData: Float32Array,
+  sampleRate: number,
+  previousMagnitudes?: number[]
+): FrameAnalysis {
+  const frame =
+    new Float64Array(
+      FRAME_SIZE
+    );
+
+  let rmsEnergy = 0;
+
+  let zeroCrossings = 0;
+
+  for (
+    let i = 0;
+    i < FRAME_SIZE;
+    i++
+  ) {
+    const value =
+      i < frameData.length
+        ? safeNumber(
+            frameData[i]
+          )
+        : 0;
+
+    const windowed =
+      value *
+      HANN_WINDOW[i];
+
+    frame[i] =
+      windowed;
+
+    rmsEnergy +=
+      value * value;
+
+    if (
+      i > 0 &&
+      (
+        value >= 0 &&
+        frameData[i - 1] < 0
+      ) ||
+      (
+        value < 0 &&
+        frameData[i - 1] >= 0
+      )
+    ) {
+      zeroCrossings++;
+    }
+  }
+
+  const rms =
+    Math.sqrt(
+      rmsEnergy /
+      FRAME_SIZE
+    );
+
+  const zcr =
+    zeroCrossings /
+    Math.max(
+      1,
+      FRAME_SIZE - 1
+    );
+
+  const {
+    real,
+    imag,
+  } = fft(frame);
+
+  const binCount =
+    FRAME_SIZE / 2;
+
+  const magnitudes =
+    new Array(binCount);
+
+  let totalMagnitude = 0;
+
+  let weightedFrequency = 0;
+
+  let totalEnergy = 0;
+
+  let maximumMagnitude = 0;
+
+  for (
+    let i = 0;
+    i < binCount;
+    i++
+  ) {
+    const magnitude =
+      Math.sqrt(
+        real[i] * real[i] +
+        imag[i] * imag[i]
+      );
+
+    magnitudes[i] =
+      magnitude;
+
+    if (
+      magnitude >
+      maximumMagnitude
+    ) {
+      maximumMagnitude =
+        magnitude;
+    }
+
+    const frequency =
+      i *
+      sampleRate /
+      FRAME_SIZE;
+
+    totalMagnitude +=
+      magnitude;
+
+    weightedFrequency +=
+      frequency *
+      magnitude;
+
+    totalEnergy +=
+      magnitude *
+      magnitude;
+  }
+
+  const centroid =
+    totalMagnitude >
+    EPSILON
+      ? weightedFrequency /
+        totalMagnitude
+      : 0;
+
+  let cumulative =
+    0;
+
+  let rolloff =
+    0;
+
+  const target =
+    totalMagnitude * 0.85;
+
+  for (
+    let i = 0;
+    i < magnitudes.length;
+    i++
+  ) {
+    cumulative +=
+      magnitudes[i];
+
+    if (
+      cumulative >= target
+    ) {
+      rolloff =
+        i *
+        sampleRate /
+        FRAME_SIZE;
+
+      break;
+    }
+  }
+
+  /*
+   * Spectral flatness
+   */
+  let logSum = 0;
+
+  let arithmeticSum = 0;
+
+  let validBins = 0;
+
+  for (
+    const magnitude
+    of magnitudes
+  ) {
+    const safeMagnitude =
+      Math.max(
+        magnitude,
+        EPSILON
+      );
+
+    logSum +=
+      Math.log(
+        safeMagnitude
+      );
+
+    arithmeticSum +=
+      safeMagnitude;
+
+    validBins++;
+  }
+
+  const geometricMean =
+    validBins > 0
+      ? Math.exp(
+          logSum / validBins
+        )
+      : 0;
+
+  const arithmeticMean =
+    validBins > 0
+      ? arithmeticSum /
+        validBins
+      : 0;
+
+  const flatness =
+    arithmeticMean >
+    EPSILON
+      ? geometricMean /
+        arithmeticMean
+      : 0;
+
+  /*
+   * Spectral entropy
+   */
+  let entropy = 0;
+
+  if (
+    totalMagnitude >
+    EPSILON
+  ) {
+    for (
+      const magnitude
+      of magnitudes
+    ) {
+      const probability =
+        magnitude /
+        totalMagnitude;
+
+      if (
+        probability >
+        EPSILON
+      ) {
+        entropy -=
+          probability *
+          Math.log2(
+            probability
+          );
+      }
+    }
+
+    entropy =
+      clamp(
+        entropy /
+        Math.log2(
+          magnitudes.length
+        )
+      );
+  }
+
+  /*
+   * Spectral peakiness
+   */
+  const peakiness =
+    totalMagnitude >
+    EPSILON
+      ? maximumMagnitude /
+        totalMagnitude
+      : 0;
+
+  /*
+   * Pitch
+   */
+  const {
+    pitch,
+    confidence,
+  } = detectPitch(
+    frame,
+    sampleRate
+  );
+
+  /*
+   * Harmonic ratio
+   */
+  const harmonicRatio =
+    calculateHarmonicRatio(
+      magnitudes,
+      pitch,
+      sampleRate
+    );
+
+  /*
+   * Chroma
+   */
+  const chroma =
+    calculateChroma(
+      magnitudes,
+      sampleRate
+    );
+
+  /*
+   * Spectral flux
+   */
+  let spectralFlux = 0;
+
+  if (
+    previousMagnitudes &&
+    previousMagnitudes.length ===
+      magnitudes.length
+  ) {
+    let sum = 0;
+
+    for (
+      let i = 0;
+      i < magnitudes.length;
+      i++
+    ) {
+      const current =
+        magnitudes[i];
+
+      const previous =
+        previousMagnitudes[i];
+
+      const difference =
+        Math.max(
+          0,
+          current - previous
+        );
+
+      sum +=
+        difference *
+        difference;
+    }
+
+    spectralFlux =
+      Math.sqrt(
+        sum /
+        magnitudes.length
+      );
+  }
+
+  return {
+    rms,
+    zcr,
+    centroid,
+    rolloff,
+    flatness,
+    entropy,
+    peakiness,
+    pitch,
+    pitchConfidence:
+      confidence,
+    harmonicRatio,
+    chroma,
+    spectralFlux,
+  };
+}
+
+
+/* ============================================================
+ * FRAME EXTRACTION
+ * ============================================================ */
+
+function extractFrames(
+  audioData: Float32Array,
+  sampleRate: number
+): FrameAnalysis[] {
+  if (
+    !audioData ||
+    audioData.length <
+      FRAME_SIZE
+  ) {
+    return [];
+  }
+
+  const possibleFrames =
+    Math.floor(
+      (
+        audioData.length -
+        FRAME_SIZE
+      ) /
+      HOP_SIZE
+    ) + 1;
+
+  const frameCount =
+    Math.min(
+      possibleFrames,
+      MAX_FRAMES
+    );
+
+  if (
+    frameCount <= 0
+  ) {
+    return [];
+  }
+
+  const frames: FrameAnalysis[] =
+    [];
+
+  /*
+   * For long files we sample frames
+   * across the complete recording rather
+   * than only analyzing the beginning.
+   */
+  const maximumStart =
+    audioData.length -
+    FRAME_SIZE;
+
+  let previousMagnitudes:
+    number[] | undefined;
+
+  for (
+    let frameIndex = 0;
+    frameIndex < frameCount;
+    frameIndex++
+  ) {
+    let start: number;
+
+    if (
+      possibleFrames <=
+      MAX_FRAMES
+    ) {
+      start =
+        frameIndex *
+        HOP_SIZE;
+    } else {
+      const position =
+        frameIndex /
+        Math.max(
+          1,
+          frameCount - 1
+        );
+
+      start =
+        Math.floor(
+          position *
+          maximumStart
+        );
+    }
+
+    const frame =
+      new Float32Array(
+        FRAME_SIZE
+      );
+
+    for (
+      let i = 0;
+      i < FRAME_SIZE;
+      i++
+    ) {
+      const index =
+        start + i;
+
+      frame[i] =
+        index <
+        audioData.length
+          ? audioData[index]
+          : 0;
+    }
+
+    const analysis =
+      analyzeFrame(
+        frame,
+        sampleRate,
+        previousMagnitudes
+      );
+
+    /*
+     * Reconstruct magnitude array
+     * for the next frame's flux comparison.
+     */
+    const windowed =
+      new Float64Array(
+        FRAME_SIZE
+      );
+
+    for (
+      let i = 0;
+      i < FRAME_SIZE;
+      i++
+    ) {
+      windowed[i] =
+        frame[i] *
+        HANN_WINDOW[i];
+    }
+
+    const {
+      real,
+      imag,
+    } = fft(windowed);
+
+    const magnitudes =
+      new Array(
+        FRAME_SIZE / 2
+      );
+
+    for (
+      let i = 0;
+      i <
+      FRAME_SIZE / 2;
+      i++
+    ) {
+      magnitudes[i] =
+        Math.sqrt(
+          real[i] * real[i] +
+          imag[i] * imag[i]
+        );
+    }
+
+    previousMagnitudes =
+      magnitudes;
+
+    frames.push(
+      analysis
+    );
+  }
+
+  return frames;
+}
+
+
+/* ============================================================
+ * ARRAY EXTRACTION
+ * ============================================================ */
+
+interface FeatureArrays {
+  rms: number[];
+  zcr: number[];
+  centroid: number[];
+  rolloff: number[];
+  flatness: number[];
+  entropy: number[];
+  peakiness: number[];
+  pitch: number[];
+  pitchConfidence: number[];
+  harmonic: number[];
+  spectralFlux: number[];
+  chroma: number[][];
+}
+
+
+function collectFeatureArrays(
+  frames: FrameAnalysis[]
+): FeatureArrays {
+  return {
+    rms: frames.map(
+      frame => frame.rms
+    ),
+
+    zcr: frames.map(
+      frame => frame.zcr
+    ),
+
+    centroid: frames.map(
+      frame => frame.centroid
+    ),
+
+    rolloff: frames.map(
+      frame => frame.rolloff
+    ),
+
+    flatness: frames.map(
+      frame => frame.flatness
+    ),
+
+    entropy: frames.map(
+      frame => frame.entropy
+    ),
+
+    peakiness: frames.map(
+      frame => frame.peakiness
+    ),
+
+    pitch: frames
+      .map(frame => frame.pitch)
+      .filter(
+        pitch => pitch > 0
+      ),
+
+    pitchConfidence:
+      frames.map(
+        frame =>
+          frame.pitchConfidence
+      ),
+
+    harmonic: frames.map(
+      frame =>
+        frame.harmonicRatio
+    ),
+
+    spectralFlux:
+      frames.map(
+        frame =>
+          frame.spectralFlux
+      ),
+
+    chroma: frames.map(
+      frame =>
+        frame.chroma
+    ),
+  };
+}
+
+
+/* ============================================================
+ * SEGMENT CONSISTENCY
+ * ============================================================ */
+
+function calculateSegmentConsistency(
+  frames: FrameAnalysis[]
+): number {
+  if (
+    frames.length <
+    8
+  ) {
+    return 0.5;
+  }
+
+  const segmentCount =
+    Math.min(
+      4,
+      Math.floor(
+        frames.length / 4
+      )
+    );
+
+  if (
+    segmentCount < 2
+  ) {
+    return 0.5;
+  }
+
+  const segments: FrameAnalysis[][] =
+    [];
+
+  for (
+    let s = 0;
+    s < segmentCount;
+    s++
+  ) {
+    const start =
+      Math.floor(
+        s *
+        frames.length /
+        segmentCount
+      );
+
+    const end =
+      Math.floor(
+        (s + 1) *
+        frames.length /
+        segmentCount
+      );
+
+    segments.push(
+      frames.slice(
+        start,
+        Math.max(
+          start + 1,
+          end
+        )
+      )
+    );
+  }
+
+  const segmentPitchMeans =
+    segments.map(
+      segment =>
+        mean(
+          segment
+            .map(
+              frame =>
+                frame.pitch
+            )
+            .filter(
+              pitch =>
+                pitch > 0
+            )
+        )
+    );
+
+  const segmentEnergyMeans =
+    segments.map(
+      segment =>
+        mean(
+          segment.map(
+            frame =>
+              frame.rms
+          )
+        )
+    );
+
+  const pitchVariation =
+    coefficientOfVariation(
+      segmentPitchMeans.filter(
+        value =>
+          value > 0
+      )
+    );
+
+  const energyVariation =
+    coefficientOfVariation(
+      segmentEnergyMeans
+    );
+
+  const pitchConsistency =
+    clamp(
+      1 -
+      pitchVariation /
+      0.30
+    );
+
+  const energyConsistency =
+    clamp(
+      1 -
+      energyVariation /
+      0.60
+    );
+
+  return clamp(
+    (
+      pitchConsistency +
+      energyConsistency
+    ) / 2
+  );
+}
+
+
+/* ============================================================
+ * CHROMA STABILITY
+ * ============================================================ */
+
+function calculateChromaStability(
+  chromaFrames: number[][]
+): number {
+  if (
+    chromaFrames.length <
+    2
+  ) {
+    return 0.5;
+  }
+
+  const averageChroma =
+    new Array(12).fill(0);
+
+  for (
+    const frame
+    of chromaFrames
+  ) {
+    for (
+      let i = 0;
+      i < 12;
+      i++
+    ) {
+      averageChroma[i] +=
+        frame[i] || 0;
+    }
+  }
+
+  for (
+    let i = 0;
+    i < 12;
+    i++
+  ) {
+    averageChroma[i] /=
+      chromaFrames.length;
+  }
+
+  let totalDistance = 0;
+
+  for (
+    const frame
+    of chromaFrames
+  ) {
+    let distance = 0;
+
+    for (
+      let i = 0;
+      i < 12;
+      i++
+    ) {
+      const difference =
+        (frame[i] || 0) -
+        averageChroma[i];
+
+      distance +=
+        difference *
+        difference;
+    }
+
+    totalDistance +=
+      Math.sqrt(distance);
+  }
+
+  const averageDistance =
+    totalDistance /
+    chromaFrames.length;
+
+  return clamp(
+    1 -
+    averageDistance /
+    0.60
+  );
+}
+
+
+/* ============================================================
+ * FORMANT STABILITY PROXY
+ * ============================================================ */
+
+function calculateFormantStability(
+  centroids: number[],
+  rolloffs: number[]
+): number {
+  if (
+    centroids.length <
+    3
+  ) {
+    return 0.5;
+  }
+
+  const centroidCV =
+    coefficientOfVariation(
+      centroids
+    );
+
+  const rolloffCV =
+    coefficientOfVariation(
+      rolloffs
+    );
+
+  const centroidStability =
+    clamp(
+      1 -
+      centroidCV /
+      0.35
+    );
+
+  const rolloffStability =
+    clamp(
+      1 -
+      rolloffCV /
+      0.35
+    );
+
+  return clamp(
+    (
+      centroidStability +
+      rolloffStability
+    ) / 2
+  );
+}
+
+
+/* ============================================================
+ * PUBLIC FEATURE EXTRACTION
+ * ============================================================ */
+
+export function extractAudioFeatures(
+  audioData: Float32Array,
+  sampleRate = SAMPLE_RATE_FALLBACK
+): AudioFeatures {
+  const frames =
+    extractFrames(
+      audioData,
+      sampleRate
+    );
+
+  if (
+    frames.length === 0
+  ) {
+    return emptyFeatures();
+  }
+
+  const arrays =
+    collectFeatureArrays(
+      frames
+    );
+
+  const pitchValues =
+    arrays.pitch;
+
+  const pitchMean =
+    mean(pitchValues);
+
+  const pitchVariation =
+    pitchMean > 0
+      ? clamp(
+          standardDeviation(
+            pitchValues
+          ) /
+          pitchMean
+        )
+      : 0;
+
+  const temporalModulation =
+    clamp(
+      coefficientOfVariation(
+        arrays.rms
+      )
+    );
+
+  const chromaStability =
+    calculateChromaStability(
+      arrays.chroma
+    );
+
+  const formantStability =
+    calculateFormantStability(
+      arrays.centroid,
+      arrays.rolloff
+    );
+
+  return {
+    zeroCrossingRate:
+      mean(arrays.zcr),
+
+    rmsEnergy:
+      mean(arrays.rms),
+
+    spectralCentroid:
+      mean(arrays.centroid),
+
+    spectralRolloff:
+      mean(arrays.rolloff),
+
+    spectralFlatness:
+      mean(arrays.flatness),
+
+    harmonicRatio:
+      mean(arrays.harmonic),
+
+    pitchMean,
+
+    pitchVariation,
+
+    temporalModulation,
+
+    chromaStability,
+
+    formantStability,
+  };
+}
+
+
+/* ============================================================
+ * DIAGNOSTIC ANALYSIS
+ * ============================================================ */
+
+function calculateDiagnostics(
+  frames: FrameAnalysis[]
+): AnalysisDiagnostics {
+  if (
+    frames.length === 0
+  ) {
+    return emptyDiagnostics();
+  }
+
+  const arrays =
+    collectFeatureArrays(
+      frames
+    );
+
+  const activeFrames =
+    frames.filter(
+      frame =>
+        frame.rms >
+        0.008
+    );
+
+  const voicedFrames =
+    frames.filter(
+      frame =>
+        frame.pitch > 0 &&
+        frame.pitchConfidence >=
+          0.30 &&
+        frame.rms >
+          0.008
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * PITCH DIAGNOSTICS
+   * ----------------------------------------------------------
+   */
+
+  const voicedPitches =
+    voicedFrames.map(
+      frame =>
+        frame.pitch
+    );
+
+  const pitchMean =
+    mean(voicedPitches);
+
+  const pitchCV =
+    coefficientOfVariation(
+      voicedPitches
+    );
+
+  const pitchDifferences =
+    relativeDifferences(
+      voicedPitches
+    );
+
+  const pitchStepVariation =
+    pitchDifferences.length
+      ? mean(
+          pitchDifferences
+        )
+      : 0;
+
+  const pitchRegularity =
+    clamp(
+      1 -
+      pitchCV /
+      0.30
+    );
+
+  const pitchStepEntropy =
+    entropyFromHistogram(
+      pitchDifferences,
+      8
+    );
+
+  const pitchRepetition =
+    voicedPitches.length >=
+    6
+      ? clamp(
+          autocorrelationAtLag(
+            voicedPitches,
+            Math.max(
+              1,
+              Math.floor(
+                voicedPitches.length /
+                5
+              )
+            )
+          ) + 1
+        ) / 2
+      : 0.5;
+
+  const pitchSmoothness =
+    pitchStepVariation >
+    EPSILON
+      ? clamp(
+          1 -
+          pitchStepVariation /
+          0.20
+        )
+      : 1;
+
+  /*
+   * ----------------------------------------------------------
+   * ENERGY DIAGNOSTICS
+   * ----------------------------------------------------------
+   */
+
+  const energyCV =
+    coefficientOfVariation(
+      arrays.rms
+    );
+
+  const energyDifferences =
+    relativeDifferences(
+      arrays.rms
+    );
+
+  const energyStepVariation =
+    energyDifferences.length
+      ? mean(
+          energyDifferences
+        )
+      : 0;
+
+  const energyRegularity =
+    clamp(
+      1 -
+      energyCV /
+      0.70
+    );
+
+  const energySmoothness =
+    clamp(
+      1 -
+      energyStepVariation /
+      0.60
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * SPECTRAL DIAGNOSTICS
+   * ----------------------------------------------------------
+   */
+
+  const spectralCV =
+    coefficientOfVariation(
+      arrays.centroid
+    );
+
+  const rolloffCV =
+    coefficientOfVariation(
+      arrays.rolloff
+    );
+
+  const fluxMean =
+    mean(
+      arrays.spectralFlux
+    );
+
+  const fluxVariation =
+    coefficientOfVariation(
+      arrays.spectralFlux
+    );
+
+  const spectralRegularity =
+    clamp(
+      1 -
+      (
+        spectralCV +
+        rolloffCV
+      ) /
+      0.70
+    );
+
+  const spectralStability =
+    clamp(
+      1 -
+      fluxMean /
+      2500
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * HARMONIC DIAGNOSTICS
+   * ----------------------------------------------------------
+   */
+
+  const harmonicMean =
+    mean(
+      arrays.harmonic
+    );
+
+  const harmonicCV =
+    coefficientOfVariation(
+      arrays.harmonic
+    );
+
+  const harmonicConsistency =
+    clamp(
+      1 -
+      harmonicCV /
+      0.70
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * VOICING
+   * ----------------------------------------------------------
+   */
+
+  const voicedFrameRatio =
+    frames.length > 0
+      ? voicedFrames.length /
+        frames.length
+      : 0;
+
+  const pitchConfidenceMean =
+    voicedFrames.length
+      ? mean(
+          voicedFrames.map(
+            frame =>
+              frame.pitchConfidence
+          )
+        )
+      : 0;
+
+  const voicingConsistency =
+    clamp(
+      (
+        voicedFrameRatio +
+        pitchConfidenceMean
+      ) / 2
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * MICRO VARIATION
+   * ----------------------------------------------------------
+   */
+
+  const pitchMicroVariation =
+    voicedPitches.length >= 3
+      ? clamp(
+          mean(
+            relativeDifferences(
+              voicedPitches
+            )
+          ) /
+          0.20
+        )
+      : 0;
+
+  const energyMicroVariation =
+    arrays.rms.length >= 3
+      ? clamp(
+          mean(
+            relativeDifferences(
+              arrays.rms
+            )
+          ) /
+          0.50
+        )
+      : 0;
+
+  const spectralMicroVariation =
+    arrays.centroid.length >= 3
+      ? clamp(
+          mean(
+            relativeDifferences(
+              arrays.centroid
+            )
+          ) /
+          0.35
+        )
+      : 0;
+
+  const microVariation =
+    clamp(
+      (
+        pitchMicroVariation +
+        energyMicroVariation +
+        spectralMicroVariation
+      ) / 3
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * TEMPORAL REPETITION
+   * ----------------------------------------------------------
+   */
+
+  const rmsRepetition =
+    arrays.rms.length >= 8
+      ? Math.abs(
+          autocorrelationAtLag(
+            arrays.rms,
+            Math.max(
+              1,
+              Math.floor(
+                arrays.rms.length /
+                5
+              )
+            )
+          )
+        )
+      : 0;
+
+  const spectralRepetition =
+    arrays.centroid.length >= 8
+      ? Math.abs(
+          autocorrelationAtLag(
+            arrays.centroid,
+            Math.max(
+              1,
+              Math.floor(
+                arrays.centroid.length /
+                5
+              )
+            )
+          )
+        )
+      : 0;
+
+  const temporalRepetition =
+    clamp(
+      (
+        rmsRepetition +
+        spectralRepetition
+      ) / 2
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * SEGMENT CONSISTENCY
+   * ----------------------------------------------------------
+   */
+
+  const segmentConsistency =
+    calculateSegmentConsistency(
+      frames
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * TESTS
+   * ----------------------------------------------------------
+   *
+   * These are intentionally independent heuristic signals.
+   * No single test is allowed to determine the verdict.
+   */
+
+  let syntheticTests = 0;
+
+  let naturalTests = 0;
+
+  let manipulationTests = 0;
+
+  /*
+   * SYNTHETIC TEST 1
+   * Extremely low pitch variation
+   */
+  if (
+    voicedPitches.length >= 6 &&
+    pitchCV < 0.055
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 2
+   * Strong pitch repetition
+   */
+  if (
+    voicedPitches.length >= 8 &&
+    pitchRepetition > 0.72
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 3
+   * Excessively smooth pitch contour
+   */
+  if (
+    voicedPitches.length >= 8 &&
+    pitchSmoothness > 0.88 &&
+    pitchStepEntropy < 0.45
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 4
+   * Very stable energy
+   */
+  if (
+    activeFrames.length >= 8 &&
+    energyRegularity > 0.88 &&
+    energyStepVariation < 0.12
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 5
+   * Very stable spectral movement
+   */
+  if (
+    spectralRegularity > 0.88 &&
+    spectralStability > 0.90
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 6
+   * Highly consistent harmonics
+   */
+  if (
+    harmonicMean > 0.48 &&
+    harmonicConsistency > 0.88
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 7
+   * Very low frame diversity
+   */
+  if (
+    microVariation < 0.20 &&
+    segmentConsistency > 0.88
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 8
+   * Temporal repetition
+   */
+  if (
+    temporalRepetition > 0.78
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 9
+   * High voicing with highly regular pitch
+   */
+  if (
+    voicedFrameRatio > 0.78 &&
+    pitchRegularity > 0.90 &&
+    pitchStepEntropy < 0.50
+  ) {
+    syntheticTests++;
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * NATURAL TESTS
+   * ----------------------------------------------------------
+   */
+
+  /*
+   * NATURAL TEST 1
+   * Broad pitch movement
+   */
+  if (
+    voicedPitches.length >= 8 &&
+    pitchCV > 0.10
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 2
+   * Diverse pitch steps
+   */
+  if (
+    voicedPitches.length >= 8 &&
+    pitchStepEntropy > 0.55 &&
+    pitchStepVariation > 0.035
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 3
+   * Energy dynamics
+   */
+  if (
+    activeFrames.length >= 8 &&
+    energyCV > 0.16 &&
+    energyStepVariation > 0.08
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 4
+   * Spectral movement
+   */
+  if (
+    fluxMean > 250 &&
+    spectralCV > 0.08
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 5
+   * Spectral variation
+   */
+  if (
+    spectralCV > 0.12 ||
+    rolloffCV > 0.12
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 6
+   * Voiced/unvoiced variation
+   */
+  if (
+    voicedFrameRatio > 0.15 &&
+    voicedFrameRatio < 0.82
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 7
+   * Micro variation
+   */
+  if (
+    microVariation > 0.35
+  ) {
+    naturalTests++;
+  }
+
+  /*
+   * NATURAL TEST 8
+   * Low temporal repetition
+   */
+  if (
+    temporalRepetition < 0.45
+  ) {
+    naturalTests++;
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * MANIPULATION TESTS
+   * ----------------------------------------------------------
+   */
+
+  /*
+   * MANIPULATION TEST 1
+   * Spectral instability
+   */
+  if (
+    spectralCV > 0.45 ||
+    fluxVariation > 1.25
+  ) {
+    manipulationTests++;
+  }
+
+  /*
+   * MANIPULATION TEST 2
+   * Abrupt energy changes
+   */
+  if (
+    energyStepVariation > 0.70
+  ) {
+    manipulationTests++;
+  }
+
+  /*
+   * MANIPULATION TEST 3
+   * Chroma instability
+   */
+  const chromaStability =
+    calculateChromaStability(
+      arrays.chroma
+    );
+
+  if (
+    chromaStability < 0.20
+  ) {
+    manipulationTests++;
+  }
+
+  /*
+   * MANIPULATION TEST 4
+   * Contradictory feature behaviour
+   */
+  if (
+    spectralStability < 0.25 &&
+    pitchRegularity > 0.80
+  ) {
+    manipulationTests++;
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * EVIDENCE SCORES
+   * ----------------------------------------------------------
+   */
+
+  const syntheticEvidence =
+    clamp(
+      (
+        clamp(
+          syntheticTests / 9
+        ) * 0.35 +
+
+        pitchRegularity *
+          0.12 +
+
+        energyRegularity *
+          0.10 +
+
+        spectralRegularity *
+          0.10 +
+
+        harmonicConsistency *
+          0.10 +
+
+        temporalRepetition *
+          0.10 +
+
+        segmentConsistency *
+          0.08 +
+
+        (1 - microVariation) *
+          0.05
+      )
+    );
+
+  const naturalEvidence =
+    clamp(
+      (
+        clamp(
+          naturalTests / 8
+        ) * 0.35 +
+
+        clamp(
+          pitchCV /
+          0.30
+        ) * 0.12 +
+
+        clamp(
+          energyCV /
+          0.70
+        ) * 0.10 +
+
+        clamp(
+          spectralCV /
+          0.35
+        ) * 0.10 +
+
+        clamp(
+          fluxMean /
+          2500
+        ) * 0.10 +
+
+        microVariation *
+          0.08 +
+
+        (1 - temporalRepetition) *
+          0.08 +
+
+        (1 - segmentConsistency) *
+          0.07
+      )
+    );
+
+  const manipulationEvidence =
+    clamp(
+      (
+        clamp(
+          manipulationTests / 4
+        ) * 0.45 +
+
+        clamp(
+          spectralCV /
+          0.60
+        ) * 0.15 +
+
+        clamp(
+          energyStepVariation /
+          1.0
+        ) * 0.15 +
+
+        (1 - chromaStability) *
+          0.10 +
+
+        (
+          spectralStability <
+          0.25
+            ? 0.15
+            : 0
+        )
+      )
+    );
+
+
+  /*
+   * ----------------------------------------------------------
+   * SAMPLE RELIABILITY
+   * ----------------------------------------------------------
+   */
+
+  const frameReliability =
+    clamp(
+      frames.length /
+      50
+    );
+
+  const activeReliability =
+    clamp(
+      activeFrames.length /
+      30
+    );
+
+  const voicedReliability =
+    clamp(
+      voicedFrames.length /
+      25
+    );
+
+  const confidenceReliability =
+    clamp(
+      mean(
+        voicedFrames.map(
+          frame =>
+            frame.pitchConfidence
+        )
+      )
+    );
+
+  const sampleReliability =
+    clamp(
+      (
+        frameReliability *
+          0.30 +
+
+        activeReliability *
+          0.30 +
+
+        voicedReliability *
+          0.25 +
+
+        confidenceReliability *
+          0.15
+      )
+    );
+
+
+  /*
+   * ----------------------------------------------------------
+   * TEST AGREEMENT
+   * ----------------------------------------------------------
+   */
+
+  const evidenceValues = [
+    syntheticEvidence,
+    naturalEvidence,
+    manipulationEvidence,
+  ];
+
+  const evidenceMean =
+    mean(evidenceValues);
+
+  const evidenceSpread =
+    standardDeviation(
+      evidenceValues
+    );
+
+  const testAgreement =
+    clamp(
+      1 -
+      evidenceSpread /
+      0.50
+    );
+
+
+  /*
+   * ----------------------------------------------------------
+   * FINAL DIAGNOSTICS
+   * ----------------------------------------------------------
+   */
+
+  return {
+    pitchRegularity,
+
+    energyRegularity,
+
+    spectralRegularity,
+
+    harmonicConsistency,
+
+    microVariation,
+
+    temporalRepetition,
+
+    voicingConsistency,
+
+    segmentConsistency,
+
+    aiEvidence:
+      syntheticEvidence,
+
+    realEvidence:
+      naturalEvidence,
+
+    manipulationEvidence,
+
+    sampleReliability,
+
+    testAgreement,
+
+    syntheticTests,
+
+    naturalTests,
+
+    manipulationTests,
+
+    totalFrames:
+      frames.length,
+
+    activeFrames:
+      activeFrames.length,
+
+    voicedFrames:
+      voicedFrames.length,
+  };
+}
+
+
+/* ============================================================
+ * EMPTY VALUES
+ * ============================================================ */
+
+function emptyFeatures(): AudioFeatures {
+  return {
+    zeroCrossingRate: 0,
+    rmsEnergy: 0,
+    spectralCentroid: 0,
+    spectralRolloff: 0,
+    spectralFlatness: 0,
+    harmonicRatio: 0,
+    pitchMean: 0,
+    pitchVariation: 0,
+    temporalModulation: 0,
+    chromaStability: 0,
+    formantStability: 0,
+  };
+}
+
+
+function emptyDiagnostics(): AnalysisDiagnostics {
+  return {
+    pitchRegularity: 0,
+    energyRegularity: 0,
+    spectralRegularity: 0,
+    harmonicConsistency: 0,
+    microVariation: 0,
+    temporalRepetition: 0,
+    voicingConsistency: 0,
+    segmentConsistency: 0,
+
+    aiEvidence: 0,
+    realEvidence: 0,
+    manipulationEvidence: 0,
+
+    sampleReliability: 0,
+    testAgreement: 0,
+
+    syntheticTests: 0,
+    naturalTests: 0,
+    manipulationTests: 0,
+
+    totalFrames: 0,
+    activeFrames: 0,
+    voicedFrames: 0,
+  };
+}
+
+
+/* ============================================================
+ * CLASSIFICATION
+ * ============================================================ */
+
+function classifyFromDiagnostics(
+  diagnostics: AnalysisDiagnostics
+): {
+  verdict:
+    | "AI-Generated"
+    | "Real Voice"
+    | "Possibly Manipulated"
+    | "Inconclusive";
+
+  confidence: number;
+
+  explanation: string;
+} {
+  const {
+    aiEvidence,
+    realEvidence,
+    manipulationEvidence,
+
+    syntheticTests,
+    naturalTests,
+    manipulationTests,
+
+    sampleReliability,
+    testAgreement,
+  } = diagnostics;
+
+
+  /*
+   * Very weak samples should never produce
+   * a confident verdict.
+   */
+  if (
+    sampleReliability <
+    0.30
+  ) {
+    return {
+      verdict:
+        "Inconclusive",
+
+      confidence:
+        Math.round(
+          45 +
+          sampleReliability *
+          20
+        ),
+
+      explanation:
+        "The audio sample contains insufficient reliable speech information for a confident acoustic classification.",
+    };
+  }
+
+
+  /*
+   * MANIPULATION
+   */
+  if (
+    manipulationTests >= 2 &&
+    manipulationEvidence >= 0.58 &&
+    manipulationEvidence >
+      aiEvidence + 0.04 &&
+    manipulationEvidence >
+      realEvidence + 0.04
+  ) {
+    const confidence =
+      clamp(
+        55 +
+        manipulationEvidence *
+          30 +
+        sampleReliability *
+          10 +
+        testAgreement *
+          5,
+        50,
+        88
+      );
+
+    return {
+      verdict:
+        "Possibly Manipulated",
+
+      confidence:
+        Math.round(
+          confidence
+        ),
+
+      explanation:
+        "Several acoustic measurements show inconsistent or abrupt behaviour that can be associated with editing, processing, or manipulation. This is not proof of deliberate tampering.",
+    };
+  }
+
+
+  /*
+   * AI-GENERATED
+   *
+   * We require multiple independent signals.
+   */
+  const aiMargin =
+    aiEvidence -
+    realEvidence;
+
+  const strongAI =
+    syntheticTests >= 5 &&
+    aiEvidence >= 0.58 &&
+    aiMargin >= 0.08;
+
+  const veryStrongAI =
+    syntheticTests >= 4 &&
+    aiEvidence >= 0.70 &&
+    aiMargin >= 0.15 &&
+    testAgreement >= 0.34;
+
+  if (
+    strongAI ||
+    veryStrongAI
+  ) {
+    let confidence =
+      54 +
+      aiEvidence * 34 +
+      testAgreement * 8 +
+      sampleReliability * 6;
+
+    /*
+     * Do not let the heuristic engine
+     * display an unrealistic 99% certainty.
+     */
+    confidence =
+      clamp(
+        confidence,
+        52,
+        94
+      );
+
+    return {
+      verdict:
+        "AI-Generated",
+
+      confidence:
+        Math.round(
+          confidence
+        ),
+
+      explanation:
+        "Multiple independent acoustic patterns are consistent with synthetic speech, including pitch regularity, temporal consistency, spectral behaviour, and frame-level repetition. This is a heuristic result rather than forensic authentication.",
+    };
+  }
+
+
+  /*
+   * REAL VOICE
+   */
+  const realMargin =
+    realEvidence -
+    aiEvidence;
+
+  const strongReal =
+    naturalTests >= 4 &&
+    realEvidence >= 0.55 &&
+    realMargin >= 0.08;
+
+  const veryStrongReal =
+    naturalTests >= 5 &&
+    realEvidence >= 0.65 &&
+    realMargin >= 0.12;
+
+  if (
+    strongReal ||
+    veryStrongReal
+  ) {
+    let confidence =
+      52 +
+      realEvidence * 32 +
+      testAgreement * 8 +
+      sampleReliability * 6;
+
+    confidence =
+      clamp(
+        confidence,
+        50,
+        90
+      );
+
+    return {
+      verdict:
+        "Real Voice",
+
+      confidence:
+        Math.round(
+          confidence
+        ),
+
+      explanation:
+        "The recording contains several natural acoustic variations across pitch, energy, spectrum, and temporal behaviour. These characteristics are more consistent with naturally produced speech under this heuristic analysis.",
+    };
+  }
+
+
+  /*
+   * INCONCLUSIVE
+   */
+  const strongestEvidence =
+    Math.max(
+      aiEvidence,
+      realEvidence,
+      manipulationEvidence
+    );
+
+  const confidence =
+    clamp(
+      45 +
+      strongestEvidence * 25 +
+      sampleReliability * 10,
+      45,
+      68
+    );
+
+  return {
+    verdict:
+      "Inconclusive",
+
+    confidence:
+      Math.round(
+        confidence
+      ),
+
+    explanation:
+      "The acoustic measurements contain mixed or insufficient evidence. The current browser-based heuristic engine cannot confidently classify this sample.",
+  };
+}
+
+
+/* ============================================================
+ * AUDIO BUFFER → MONO PCM
+ * ============================================================ */
+
+function audioBufferToMono(
+  audioBuffer: AudioBuffer
+): Float32Array {
+  const channels =
+    audioBuffer.numberOfChannels;
+
+  const length =
+    audioBuffer.length;
+
+  if (
+    channels <= 0 ||
+    length <= 0
+  ) {
+    return new Float32Array(0);
+  }
+
+  if (
+    channels === 1
+  ) {
+    return audioBuffer.getChannelData(0);
+  }
+
+  const mono =
+    new Float32Array(
+      length
+    );
+
+  for (
+    let channel = 0;
+    channel < channels;
+    channel++
+  ) {
+    const data =
+      audioBuffer.getChannelData(
+        channel
+      );
+
+    for (
+      let i = 0;
+      i < length;
+      i++
+    ) {
+      mono[i] +=
+        data[i] /
+        channels;
+    }
+  }
+
+  return mono;
+}
+
+
+/* ============================================================
+ * RESULT BUILDER
+ * ============================================================ */
+
+function createResult(
+  verdict:
+    | "AI-Generated"
+    | "Real Voice"
+    | "Possibly Manipulated"
+    | "Inconclusive",
+
+  confidence: number,
+
+  features: AudioFeatures,
+
+  explanation: string,
+
+  diagnostics?: AnalysisDiagnostics
+): AnalysisResult {
+  return {
+    id:
+      `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 9)}`,
+
+    isDeepfake:
+      verdict ===
+      "AI-Generated",
+
+    verdict,
+
+    confidence:
+      Math.round(
+        clamp(
+          confidence,
+          0,
+          100
+        )
+      ),
+
+    features,
+
+    explanation,
+
+    timestamp:
+      Date.now(),
+
+    diagnostics,
+  };
+}
+
+
+/* ============================================================
+ * INTERNAL FLOAT32 ANALYSIS
+ * ============================================================ */
+
+function analyzeFloat32Data(
+  audioData: Float32Array,
+  sampleRate: number
+): AnalysisResult {
+  if (
+    !audioData ||
+    audioData.length <
+      FRAME_SIZE
+  ) {
+    return createResult(
+      "Inconclusive",
+      45,
+      emptyFeatures(),
+      "The audio sample is too short for reliable acoustic analysis."
+    );
+  }
+
+  const frames =
+    extractFrames(
+      audioData,
+      sampleRate
+    );
+
+  if (
+    frames.length <
+    MIN_ANALYSIS_FRAMES
+  ) {
+    return createResult(
+      "Inconclusive",
+      45,
+      extractAudioFeatures(
+        audioData,
+        sampleRate
+      ),
+      "The audio sample does not contain enough analysis frames for a reliable result."
+    );
+  }
+
+  const features =
+    extractAudioFeatures(
+      audioData,
+      sampleRate
+    );
+
+  const diagnostics =
+    calculateDiagnostics(
+      frames
+    );
+
+  if (
+    diagnostics.activeFrames <
+    MIN_ACTIVE_FRAMES
+  ) {
+    return createResult(
+      "Inconclusive",
+      48,
+      features,
+      "The recording contains too little active speech/audio energy for reliable classification.",
+      diagnostics
+    );
+  }
+
+  const classification =
+    classifyFromDiagnostics(
+      diagnostics
+    );
+
+  /*
+   * Very low voiced-frame count reduces
+   * confidence because pitch-based evidence
+   * becomes unreliable.
+   */
+  let finalConfidence =
+    classification.confidence;
+
+  if (
+    diagnostics.voicedFrames <
+    MIN_VOICED_FRAMES
+  ) {
+    finalConfidence =
+      Math.min(
+        finalConfidence,
+        70
+      );
+  }
+
+  /*
+   * Extremely short recordings should not
+   * produce very high confidence.
+   */
+  if (
+    diagnostics.totalFrames <
+    25
+  ) {
+    finalConfidence =
+      Math.min(
+        finalConfidence,
+        76
+      );
+  }
+
+  return createResult(
+    classification.verdict,
+    finalConfidence,
+    features,
+    classification.explanation,
+    diagnostics
+  );
+}
+
+
+/* ============================================================
+ * PUBLIC analyzeAudio
+ *
+ * THIS IS THE IMPORTANT APP COMPATIBILITY FIX.
+ *
+ * App.tsx calls:
+ *
+ * analyzeAudio(
+ *   audioBuffer,
+ *   file.name,
+ *   forceResult
+ * )
+ * ============================================================ */
+
+export async function analyzeAudio(
+  audioBuffer: AudioBuffer | null,
+  filename = "audio",
+  forceResult?:
+    | "real"
+    | "fake"
+    | null
+): Promise<AnalysisResult> {
+
+  /*
+   * ----------------------------------------------------------
+   * FORCED REAL DEMO
+   * ----------------------------------------------------------
+   */
+
+  if (
+    forceResult === "real"
+  ) {
+    const features =
+      audioBuffer
+        ? extractAudioFeatures(
+            audioBufferToMono(
+              audioBuffer
+            ),
+            audioBuffer.sampleRate
+          )
+        : emptyFeatures();
+
+    return createResult(
+      "Real Voice",
+      95,
+      features,
+      `Demo result: "${filename}" was explicitly configured as a Real Voice sample.`
+    );
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * FORCED AI DEMO
+   * ----------------------------------------------------------
+   */
+
+  if (
+    forceResult === "fake"
+  ) {
+    const features =
+      audioBuffer
+        ? extractAudioFeatures(
+            audioBufferToMono(
+              audioBuffer
+            ),
+            audioBuffer.sampleRate
+          )
+        : emptyFeatures();
+
+    return createResult(
+      "AI-Generated",
+      95,
+      features,
+      `Demo result: "${filename}" was explicitly configured as an AI-Generated sample.`
+    );
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * NO AUDIO BUFFER
+   *
+   * App.tsx can call analyzeAudio(null, filename)
+   * for fallback/batch paths.
+   *
+   * Do NOT invent a real/fake result here.
+   * ----------------------------------------------------------
+   */
+
+  if (!audioBuffer) {
+    return createResult(
+      "Inconclusive",
+      45,
+      emptyFeatures(),
+      `No decoded audio buffer was available for "${filename}", so acoustic classification could not be performed.`
+    );
+  }
+
+
+  /*
+   * ----------------------------------------------------------
+   * REAL AUDIO ANALYSIS
+   * ----------------------------------------------------------
+   */
+
   try {
-    const data = localStorage.getItem('voxforensics_history');
-    return data ? JSON.parse(data) : [];
-  } catch {
+    const mono =
+      audioBufferToMono(
+        audioBuffer
+      );
+
+    if (
+      mono.length === 0
+    ) {
+      return createResult(
+        "Inconclusive",
+        45,
+        emptyFeatures(),
+        `The decoded audio for "${filename}" contained no usable samples.`
+      );
+    }
+
+    return analyzeFloat32Data(
+      mono,
+      audioBuffer.sampleRate ||
+        SAMPLE_RATE_FALLBACK
+    );
+  } catch (error) {
+    console.error(
+      "VoxForensics analysis error:",
+      error
+    );
+
+    return createResult(
+      "Inconclusive",
+      45,
+      emptyFeatures(),
+      `The audio "${filename}" could not be analyzed safely.`
+    );
+  }
+}
+
+
+/* ============================================================
+ * SYNCHRONOUS COMPATIBILITY API
+ *
+ * Useful if another component directly supplies
+ * Float32Array PCM data.
+ * ============================================================ */
+
+export function analyzeAudioSync(
+  audioData: Float32Array,
+  sampleRate =
+    SAMPLE_RATE_FALLBACK
+): AnalysisResult {
+  return analyzeFloat32Data(
+    audioData,
+    sampleRate
+  );
+}
+
+
+/* ============================================================
+ * HISTORY
+ * ============================================================ */
+
+const HISTORY_KEY =
+  "voxforensics_scan_history_v5";
+
+
+/*
+ * Safely convert old/new stored records.
+ *
+ * This prevents an existing localStorage entry
+ * from breaking the UI after the API update.
+ */
+function normalizeHistoryRecord(
+  item: any
+): ScanRecord | null {
+  if (
+    !item ||
+    typeof item !== "object"
+  ) {
+    return null;
+  }
+
+
+  /*
+   * Current format
+   */
+  if (
+    item.result &&
+    item.filename
+  ) {
+    const result =
+      item.result;
+
+    return {
+      id:
+        String(
+          item.id ||
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 9)}`
+        ),
+
+      filename:
+        String(
+          item.filename
+        ),
+
+      timestamp:
+        typeof item.timestamp ===
+        "string"
+          ? item.timestamp
+          : new Date(
+              Number(
+                item.timestamp ||
+                Date.now()
+              )
+            ).toISOString(),
+
+      duration:
+        Number(
+          item.duration || 0
+        ),
+
+      result: {
+        ...result,
+
+        isDeepfake:
+          result.isDeepfake ??
+          result.verdict ===
+            "AI-Generated",
+      },
+    };
+  }
+
+
+  /*
+   * Legacy v5.1 format
+   *
+   * Old records looked more like:
+   * {
+   *   id,
+   *   verdict,
+   *   confidence,
+   *   features,
+   *   fileName
+   * }
+   */
+  if (
+    item.verdict &&
+    item.features
+  ) {
+    const result: AnalysisResult = {
+      id:
+        String(
+          item.id ||
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 9)}`
+        ),
+
+      isDeepfake:
+        item.verdict ===
+        "AI-Generated",
+
+      verdict:
+        item.verdict,
+
+      confidence:
+        Number(
+          item.confidence || 0
+        ),
+
+      features:
+        item.features,
+
+      explanation:
+        String(
+          item.explanation ||
+          "Legacy analysis result."
+        ),
+
+      timestamp:
+        Number(
+          item.timestamp ||
+          Date.now()
+        ),
+
+      diagnostics:
+        item.diagnostics,
+    };
+
+    return {
+      id:
+        String(
+          item.id ||
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 9)}`
+        ),
+
+      filename:
+        String(
+          item.fileName ||
+          item.filename ||
+          "Unknown audio"
+        ),
+
+      timestamp:
+        new Date(
+          Number(
+            item.timestamp ||
+            Date.now()
+          )
+        ).toISOString(),
+
+      duration:
+        Number(
+          item.duration || 0
+        ),
+
+      result,
+    };
+  }
+
+  return null;
+}
+
+
+/* ============================================================
+ * GET HISTORY
+ * ============================================================ */
+
+export function getScanHistory():
+  ScanRecord[] {
+  try {
+    const stored =
+      localStorage.getItem(
+        HISTORY_KEY
+      );
+
+    if (!stored) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(
+        stored
+      );
+
+    if (
+      !Array.isArray(parsed)
+    ) {
+      return [];
+    }
+
+    const normalized =
+      parsed
+        .map(
+          item =>
+            normalizeHistoryRecord(
+              item
+            )
+        )
+        .filter(
+          (
+            item
+          ): item is ScanRecord =>
+            item !== null
+        );
+
+    return normalized;
+  } catch (error) {
+    console.warn(
+      "Failed to load VoxForensics history:",
+      error
+    );
+
     return [];
   }
 }
 
-// Save scan to history
-export function saveScanToHistory(filename: string, result: AnalysisResult, duration: number): ScanRecord {
-  const record: ScanRecord = {
-    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-    filename,
-    timestamp: new Date().toISOString(),
-    result,
-    duration,
-  };
-  
-  const history = getScanHistory();
-  history.unshift(record);
-  if (history.length > 50) history.pop();
-  localStorage.setItem('voxforensics_history', JSON.stringify(history));
-  
-  return record;
+
+/* ============================================================
+ * SAVE HISTORY — CURRENT APP API
+ *
+ * App.tsx calls:
+ *
+ * saveScanToHistory(
+ *   file.name,
+ *   result,
+ *   audioBuffer.duration
+ * )
+ * ============================================================ */
+
+export function saveScanToHistory(
+  filename: string,
+  result: AnalysisResult,
+  duration: number
+): void {
+  try {
+    const history =
+      getScanHistory();
+
+    const record: ScanRecord = {
+      id:
+        `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 9)}`,
+
+      filename,
+
+      timestamp:
+        new Date().toISOString(),
+
+      duration:
+        Number.isFinite(
+          duration
+        )
+          ? duration
+          : 0,
+
+      result: {
+        ...result,
+
+        isDeepfake:
+          result.isDeepfake ??
+          result.verdict ===
+            "AI-Generated",
+      },
+    };
+
+    const updatedHistory = [
+      record,
+      ...history,
+    ].slice(0, 100);
+
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify(
+        updatedHistory
+      )
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to save VoxForensics history:",
+      error
+    );
+  }
 }
 
-// Clear history
-export function clearHistory(): void {
-  localStorage.removeItem('voxforensics_history');
+
+/* ============================================================
+ * SAVE HISTORY — LEGACY COMPATIBILITY
+ * ============================================================ */
+
+export function saveScanRecord(
+  record: ScanRecord
+): void {
+  try {
+    const history =
+      getScanHistory();
+
+    const normalized: ScanRecord = {
+      ...record,
+
+      result: {
+        ...record.result,
+
+        isDeepfake:
+          record.result.isDeepfake ??
+          record.result.verdict ===
+            "AI-Generated",
+      },
+    };
+
+    const updatedHistory = [
+      normalized,
+      ...history.filter(
+        item =>
+          item.id !==
+          normalized.id
+      ),
+    ].slice(0, 100);
+
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify(
+        updatedHistory
+      )
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to save VoxForensics scan record:",
+      error
+    );
+  }
 }
+
+
+/* ============================================================
+ * CLEAR HISTORY — CURRENT APP API
+ * ============================================================ */
+
+export function clearHistory(): void {
+  try {
+    localStorage.removeItem(
+      HISTORY_KEY
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to clear VoxForensics history:",
+      error
+    );
+  }
+}
+
+
+/* ============================================================
+ * CLEAR HISTORY — LEGACY COMPATIBILITY
+ * ============================================================ */
+
+export function clearScanHistory(): void {
+  clearHistory();
+}
+
+
+/* ============================================================
+ * DIAGNOSTIC FORMATTER
+ * ============================================================ */
+
+export function formatDiagnostics(
+  diagnostics?: AnalysisDiagnostics
+): string {
+  if (!diagnostics) {
+    return "No diagnostic information available.";
+  }
+
+  return [
+    `Frames: ${diagnostics.totalFrames}`,
+    `Active frames: ${diagnostics.activeFrames}`,
+    `Voiced frames: ${diagnostics.voicedFrames}`,
+
+    `Synthetic tests: ${diagnostics.syntheticTests}/9`,
+    `Natural tests: ${diagnostics.naturalTests}/8`,
+    `Manipulation tests: ${diagnostics.manipulationTests}/4`,
+
+    `AI evidence: ${(
+      diagnostics.aiEvidence *
+      100
+    ).toFixed(1)}%`,
+
+    `Real evidence: ${(
+      diagnostics.realEvidence *
+      100
+    ).toFixed(1)}%`,
+
+    `Manipulation evidence: ${(
+      diagnostics.manipulationEvidence *
+      100
+    ).toFixed(1)}%`,
+
+    `Sample reliability: ${(
+      diagnostics.sampleReliability *
+      100
+    ).toFixed(1)}%`,
+
+    `Test agreement: ${(
+      diagnostics.testAgreement *
+      100
+    ).toFixed(1)}%`,
+  ].join(" | ");
+}
+
+
+/* ============================================================
+ * DEFAULT EXPORT
+ * ============================================================ */
+
+const analysis = {
+  analyzeAudio,
+  analyzeAudioSync,
+
+  extractAudioFeatures,
+
+  getScanHistory,
+
+  saveScanToHistory,
+  saveScanRecord,
+
+  clearHistory,
+  clearScanHistory,
+
+  formatDiagnostics,
+};
+
+export default analysis;
