@@ -1,8 +1,10 @@
 import {
   useState,
+  useEffect,
   createContext,
   useContext,
   ReactNode,
+  useRef,
 } from 'react';
 
 import { useAuth } from './AuthSystem';
@@ -13,13 +15,16 @@ interface ConsentContextType {
   revokeConsent: () => void;
 }
 
-const ConsentContext = createContext<ConsentContextType | null>(null);
+const ConsentContext =
+  createContext<ConsentContextType | null>(null);
 
 export function useConsent() {
   const context = useContext(ConsentContext);
 
   if (!context) {
-    throw new Error('useConsent must be used within ConsentProvider');
+    throw new Error(
+      'useConsent must be used within ConsentProvider'
+    );
   }
 
   return context;
@@ -32,19 +37,90 @@ export function ConsentProvider({
 }) {
   const { user } = useAuth();
 
-  const [hasConsented, setHasConsented] = useState(() => {
-    const saved = localStorage.getItem('voxforensics_consent');
-    return saved === 'true';
-  });
+  const [hasConsented, setHasConsented] =
+    useState(false);
+
+  /*
+   * Keeps track of the user who was previously logged in.
+   *
+   * This allows us to:
+   *
+   * - Keep consent after page refresh
+   * - Remove consent when the user logs out
+   * - Show consent again when the user logs in again
+   */
+  const previousUserIdRef =
+    useRef<string | null>(null);
+
+  useEffect(() => {
+    /*
+     * User is logged out.
+     *
+     * Remove the previous user's consent so that
+     * consent is requested again on the next login.
+     */
+    if (!user) {
+      if (previousUserIdRef.current) {
+        sessionStorage.removeItem(
+          `voxforensics_consent_${previousUserIdRef.current}`
+        );
+      }
+
+      previousUserIdRef.current = null;
+      setHasConsented(false);
+
+      return;
+    }
+
+    const consentKey =
+      `voxforensics_consent_${user.id}`;
+
+    const storedConsent =
+      sessionStorage.getItem(consentKey);
+
+    /*
+     * Remember the currently logged-in user.
+     */
+    previousUserIdRef.current = user.id;
+
+    /*
+     * If consent was accepted earlier during
+     * this browser session, do not show the modal.
+     *
+     * sessionStorage survives page refreshes.
+     */
+    setHasConsented(
+      storedConsent === 'true'
+    );
+  }, [user?.id]);
 
   const giveConsent = () => {
+    if (!user) {
+      return;
+    }
+
+    const consentKey =
+      `voxforensics_consent_${user.id}`;
+
+    sessionStorage.setItem(
+      consentKey,
+      'true'
+    );
+
     setHasConsented(true);
-    localStorage.setItem('voxforensics_consent', 'true');
   };
 
   const revokeConsent = () => {
+    if (user) {
+      const consentKey =
+        `voxforensics_consent_${user.id}`;
+
+      sessionStorage.removeItem(
+        consentKey
+      );
+    }
+
     setHasConsented(false);
-    localStorage.removeItem('voxforensics_consent');
   };
 
   return (
@@ -57,20 +133,10 @@ export function ConsentProvider({
     >
       {children}
 
-      {/* 
-        Consent is only shown to an authenticated user.
-        This means the flow is:
-
-        Login/Register
-              ↓
-        Consent Modal
-              ↓
-        I Agree
-              ↓
-        Application
-      */}
       {user && !hasConsented && (
-        <ConsentModal onAccept={giveConsent} />
+        <ConsentModal
+          onAccept={giveConsent}
+        />
       )}
     </ConsentContext.Provider>
   );
@@ -80,11 +146,17 @@ interface ConsentModalProps {
   onAccept: () => void;
 }
 
-function ConsentModal({ onAccept }: ConsentModalProps) {
-  const [agreed, setAgreed] = useState(false);
+function ConsentModal({
+  onAccept,
+}: ConsentModalProps) {
+  const [agreed, setAgreed] =
+    useState(false);
 
   const handleAccept = () => {
-    if (!agreed) return;
+    if (!agreed) {
+      return;
+    }
+
     onAccept();
   };
 
@@ -95,6 +167,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
         {/* Header */}
         <div className="p-6 sm:p-8 border-b border-[#1a2a4a]">
           <div className="flex items-start gap-4">
+
             <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-[#00d4ff] to-[#a855f7] flex items-center justify-center">
               <i className="fa-solid fa-shield-halved text-white text-xl"></i>
             </div>
@@ -110,6 +183,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
                 handling.
               </p>
             </div>
+
           </div>
         </div>
 
@@ -119,6 +193,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           {/* Audio Processing */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
+
               <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
                 <i className="fa-solid fa-microphone-lines text-[#00d4ff] text-sm"></i>
               </div>
@@ -126,6 +201,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
               <h3 className="text-base font-semibold text-white">
                 Audio Processing
               </h3>
+
             </div>
 
             <p className="text-sm text-gray-400 leading-relaxed pl-11">
@@ -138,6 +214,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           {/* Analysis */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
+
               <div className="w-8 h-8 rounded-lg bg-[#a855f7]/10 flex items-center justify-center">
                 <i className="fa-solid fa-brain text-[#a855f7] text-sm"></i>
               </div>
@@ -145,6 +222,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
               <h3 className="text-base font-semibold text-white">
                 AI Analysis
               </h3>
+
             </div>
 
             <p className="text-sm text-gray-400 leading-relaxed pl-11">
@@ -159,6 +237,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           {/* Data Storage */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
+
               <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
                 <i className="fa-solid fa-database text-[#00d4ff] text-sm"></i>
               </div>
@@ -166,6 +245,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
               <h3 className="text-base font-semibold text-white">
                 Data & Storage
               </h3>
+
             </div>
 
             <p className="text-sm text-gray-400 leading-relaxed pl-11">
@@ -179,6 +259,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           {/* Microphone */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
+
               <div className="w-8 h-8 rounded-lg bg-[#a855f7]/10 flex items-center justify-center">
                 <i className="fa-solid fa-microphone text-[#a855f7] text-sm"></i>
               </div>
@@ -186,6 +267,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
               <h3 className="text-base font-semibold text-white">
                 Microphone Access
               </h3>
+
             </div>
 
             <p className="text-sm text-gray-400 leading-relaxed pl-11">
@@ -198,6 +280,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           {/* User Responsibility */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
+
               <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center">
                 <i className="fa-solid fa-circle-info text-[#00d4ff] text-sm"></i>
               </div>
@@ -205,6 +288,7 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
               <h3 className="text-base font-semibold text-white">
                 User Responsibility
               </h3>
+
             </div>
 
             <p className="text-sm text-gray-400 leading-relaxed pl-11">
@@ -217,11 +301,15 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
 
           {/* Agreement */}
           <div className="pt-4 border-t border-[#1a2a4a]">
+
             <label className="flex items-start gap-3 cursor-pointer group">
+
               <input
                 type="checkbox"
                 checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
+                onChange={(e) =>
+                  setAgreed(e.target.checked)
+                }
                 className="mt-1 w-4 h-4 accent-[#00d4ff] cursor-pointer"
               />
 
@@ -230,12 +318,15 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
                 consent to the processing of audio and related data as
                 described and agree to use VoxForensics responsibly.
               </span>
+
             </label>
+
           </div>
         </div>
 
         {/* Footer */}
         <div className="p-6 sm:p-8 pt-0">
+
           <button
             onClick={handleAccept}
             disabled={!agreed}
@@ -250,9 +341,9 @@ function ConsentModal({ onAccept }: ConsentModalProps) {
           </button>
 
           <p className="text-[11px] text-gray-500 text-center mt-3">
-            You can revoke your consent later through the application's
-            account or privacy controls.
+            Consent is required each time you log in to VoxForensics.
           </p>
+
         </div>
       </div>
     </div>

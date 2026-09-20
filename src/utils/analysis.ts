@@ -1,6 +1,6 @@
 /* ============================================================
  * VoxForensics — Deepfake Audio Detector
- * Acoustic Heuristic Engine v5.1 — APP COMPATIBILITY FIX
+ * Acoustic Heuristic Engine v6.0
  *
  * IMPORTANT:
  * - Browser-only heuristic analysis
@@ -8,29 +8,30 @@
  * - Designed for project/demo use
  * - NOT forensic-grade authentication
  *
- * v5.1:
- * - Pitch tracking
- * - Pitch contour regularity
- * - Pitch repetition
- * - Energy envelope analysis
- * - Spectral movement analysis
- * - Spectral entropy / peakiness
- * - Harmonic stability
- * - Voicing consistency
- * - Micro-variation analysis
+ * v6.0:
+ * - Robust active-frame analysis
+ * - Robust voiced-frame analysis
+ * - Improved pitch regularity
+ * - Pitch outlier resistance
+ * - Energy regularity on active frames
+ * - Spectral regularity on active frames
+ * - Harmonic consistency on voiced frames
+ * - Formant proxy stability on active frames
+ * - Micro-variation recalibration
  * - Temporal repetition
  * - Segment consistency
- * - Cross-feature relationships
- * - Synthetic / natural / manipulation evidence
- * - Sample reliability
- * - Test agreement
+ * - Cross-feature synthetic evidence
+ * - Natural evidence conflict handling
+ * - Evidence disagreement penalty
  * - Conservative confidence handling
  *
  * APP COMPATIBILITY:
  * - analyzeAudio(AudioBuffer | null, filename, forceResult)
  * - getScanHistory()
  * - saveScanToHistory()
+ * - saveScanRecord()
  * - clearHistory()
+ * - clearScanHistory()
  * - AudioFeatures
  * - AnalysisResult
  * - ScanRecord
@@ -54,6 +55,7 @@ export interface AudioFeatures {
   chromaStability: number;
   formantStability: number;
 }
+
 
 export interface AnalysisDiagnostics {
   pitchRegularity: number;
@@ -82,13 +84,6 @@ export interface AnalysisDiagnostics {
 }
 
 
-/*
- * IMPORTANT:
- * App.tsx expects currentResult.isDeepfake.
- *
- * We preserve the richer v5.1 result information while adding
- * the compatibility property used by the current UI.
- */
 export interface AnalysisResult {
   id: string;
 
@@ -112,14 +107,6 @@ export interface AnalysisResult {
 }
 
 
-/*
- * App.tsx expects:
- *
- * record.result.isDeepfake
- * record.filename
- * record.timestamp
- * record.duration
- */
 export interface ScanRecord {
   id: string;
   filename: string;
@@ -159,7 +146,14 @@ function clamp(
   min = 0,
   max = 1
 ): number {
-  return Math.max(min, Math.min(max, value));
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.max(
+    min,
+    Math.min(max, value)
+  );
 }
 
 
@@ -167,12 +161,16 @@ function safeNumber(
   value: number,
   fallback = 0
 ): number {
-  return Number.isFinite(value) ? value : fallback;
+  return Number.isFinite(value)
+    ? value
+    : fallback;
 }
 
 
 function mean(values: number[]): number {
-  if (!values.length) return 0;
+  if (!values.length) {
+    return 0;
+  }
 
   let total = 0;
 
@@ -185,39 +183,64 @@ function mean(values: number[]): number {
 
 
 function variance(values: number[]): number {
-  if (values.length < 2) return 0;
+  if (values.length < 2) {
+    return 0;
+  }
 
   const m = mean(values);
 
   let total = 0;
 
   for (const value of values) {
-    const difference = value - m;
-    total += difference * difference;
+    const difference =
+      value - m;
+
+    total +=
+      difference *
+      difference;
   }
 
   return total / values.length;
 }
 
 
-function standardDeviation(values: number[]): number {
-  return Math.sqrt(Math.max(0, variance(values)));
+function standardDeviation(
+  values: number[]
+): number {
+  return Math.sqrt(
+    Math.max(
+      0,
+      variance(values)
+    )
+  );
 }
 
 
-function median(values: number[]): number {
-  if (!values.length) return 0;
+function median(
+  values: number[]
+): number {
+  if (!values.length) {
+    return 0;
+  }
 
-  const sorted = [...values].sort(
-    (a, b) => a - b
-  );
+  const sorted =
+    [...values].sort(
+      (a, b) => a - b
+    );
 
-  const middle = Math.floor(sorted.length / 2);
+  const middle =
+    Math.floor(
+      sorted.length / 2
+    );
 
-  if (sorted.length % 2 === 0) {
+  if (
+    sorted.length % 2 === 0
+  ) {
     return (
-      (sorted[middle - 1] + sorted[middle]) /
-      2
+      (
+        sorted[middle - 1] +
+        sorted[middle]
+      ) / 2
     );
   }
 
@@ -229,27 +252,39 @@ function percentile(
   values: number[],
   p: number
 ): number {
-  if (!values.length) return 0;
+  if (!values.length) {
+    return 0;
+  }
 
-  const sorted = [...values].sort(
-    (a, b) => a - b
-  );
+  const sorted =
+    [...values].sort(
+      (a, b) => a - b
+    );
 
   const position =
-    clamp(p, 0, 1) * (sorted.length - 1);
+    clamp(p, 0, 1) *
+    (sorted.length - 1);
 
-  const lower = Math.floor(position);
-  const upper = Math.ceil(position);
+  const lower =
+    Math.floor(position);
 
-  if (lower === upper) {
+  const upper =
+    Math.ceil(position);
+
+  if (
+    lower === upper
+  ) {
     return sorted[lower];
   }
 
-  const weight = position - lower;
+  const weight =
+    position - lower;
 
   return (
-    sorted[lower] * (1 - weight) +
-    sorted[upper] * weight
+    sorted[lower] *
+      (1 - weight) +
+    sorted[upper] *
+      weight
   );
 }
 
@@ -257,28 +292,50 @@ function percentile(
 function coefficientOfVariation(
   values: number[]
 ): number {
-  const m = Math.abs(mean(values));
+  if (values.length < 2) {
+    return 0;
+  }
 
-  if (m < EPSILON) return 0;
+  const m =
+    Math.abs(mean(values));
 
-  return standardDeviation(values) / m;
+  if (m < EPSILON) {
+    return 0;
+  }
+
+  return (
+    standardDeviation(values) /
+    m
+  );
 }
 
 
 function normalizeArray(
   values: number[]
 ): number[] {
-  if (!values.length) return [];
+  if (!values.length) {
+    return [];
+  }
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const min =
+    Math.min(...values);
 
-  if (Math.abs(max - min) < EPSILON) {
-    return values.map(() => 0.5);
+  const max =
+    Math.max(...values);
+
+  if (
+    Math.abs(max - min) <
+    EPSILON
+  ) {
+    return values.map(
+      () => 0.5
+    );
   }
 
   return values.map(
-    value => (value - min) / (max - min)
+    value =>
+      (value - min) /
+      (max - min)
   );
 }
 
@@ -287,33 +344,65 @@ function correlation(
   a: number[],
   b: number[]
 ): number {
-  const length = Math.min(a.length, b.length);
+  const length =
+    Math.min(
+      a.length,
+      b.length
+    );
 
-  if (length < 2) return 0;
+  if (length < 2) {
+    return 0;
+  }
 
-  const aSlice = a.slice(0, length);
-  const bSlice = b.slice(0, length);
+  const aSlice =
+    a.slice(0, length);
 
-  const meanA = mean(aSlice);
-  const meanB = mean(bSlice);
+  const bSlice =
+    b.slice(0, length);
+
+  const meanA =
+    mean(aSlice);
+
+  const meanB =
+    mean(bSlice);
 
   let numerator = 0;
   let denominatorA = 0;
   let denominatorB = 0;
 
-  for (let i = 0; i < length; i++) {
-    const da = aSlice[i] - meanA;
-    const db = bSlice[i] - meanB;
+  for (
+    let i = 0;
+    i < length;
+    i++
+  ) {
+    const da =
+      aSlice[i] - meanA;
 
-    numerator += da * db;
-    denominatorA += da * da;
-    denominatorB += db * db;
+    const db =
+      bSlice[i] - meanB;
+
+    numerator +=
+      da * db;
+
+    denominatorA +=
+      da * da;
+
+    denominatorB +=
+      db * db;
   }
 
   const denominator =
-    Math.sqrt(denominatorA * denominatorB);
+    Math.sqrt(
+      denominatorA *
+      denominatorB
+    );
 
-  if (denominator < EPSILON) return 0;
+  if (
+    denominator <
+    EPSILON
+  ) {
+    return 0;
+  }
 
   return clamp(
     numerator / denominator,
@@ -326,34 +415,55 @@ function correlation(
 function averageAbsoluteDifference(
   values: number[]
 ): number {
-  if (values.length < 2) return 0;
+  if (values.length < 2) {
+    return 0;
+  }
 
   let total = 0;
 
-  for (let i = 1; i < values.length; i++) {
+  for (
+    let i = 1;
+    i < values.length;
+    i++
+  ) {
     total += Math.abs(
-      values[i] - values[i - 1]
+      values[i] -
+      values[i - 1]
     );
   }
 
-  return total / (values.length - 1);
+  return (
+    total /
+    (values.length - 1)
+  );
 }
 
 
 function relativeDifferences(
   values: number[]
 ): number[] {
-  if (values.length < 2) return [];
+  if (values.length < 2) {
+    return [];
+  }
 
-  const differences: number[] = [];
+  const differences: number[] =
+    [];
 
-  for (let i = 1; i < values.length; i++) {
+  for (
+    let i = 1;
+    i < values.length;
+    i++
+  ) {
     const denominator =
-      Math.abs(values[i - 1]) + EPSILON;
+      Math.abs(
+        values[i - 1]
+      ) + EPSILON;
 
     differences.push(
-      Math.abs(values[i] - values[i - 1]) /
-      denominator
+      Math.abs(
+        values[i] -
+        values[i - 1]
+      ) / denominator
     );
   }
 
@@ -365,49 +475,76 @@ function entropyFromHistogram(
   values: number[],
   bins = 10
 ): number {
-  if (!values.length) return 0;
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-
-  if (Math.abs(max - min) < EPSILON) {
+  if (!values.length) {
     return 0;
   }
 
-  const histogram = new Array(bins).fill(0);
+  const min =
+    Math.min(...values);
 
-  for (const value of values) {
+  const max =
+    Math.max(...values);
+
+  if (
+    Math.abs(max - min) <
+    EPSILON
+  ) {
+    return 0;
+  }
+
+  const histogram =
+    new Array(bins).fill(0);
+
+  for (
+    const value of values
+  ) {
     const normalized =
-      (value - min) / (max - min);
+      (value - min) /
+      (max - min);
 
-    const index = Math.min(
-      bins - 1,
-      Math.floor(normalized * bins)
-    );
+    const index =
+      Math.min(
+        bins - 1,
+        Math.floor(
+          normalized * bins
+        )
+      );
 
     histogram[index]++;
   }
 
   let entropy = 0;
 
-  for (const count of histogram) {
-    if (!count) continue;
+  for (
+    const count of histogram
+  ) {
+    if (!count) {
+      continue;
+    }
 
     const probability =
-      count / values.length;
+      count /
+      values.length;
 
     entropy -=
       probability *
-      Math.log2(probability);
+      Math.log2(
+        probability
+      );
   }
 
   const maximumEntropy =
     Math.log2(bins);
 
-  if (maximumEntropy <= 0) return 0;
+  if (
+    maximumEntropy <= 0
+  ) {
+    return 0;
+  }
 
   return clamp(
-    entropy / maximumEntropy
+    entropy /
+    maximumEntropy
   );
 }
 
@@ -423,10 +560,120 @@ function autocorrelationAtLag(
     return 0;
   }
 
-  const a = values.slice(0, values.length - lag);
-  const b = values.slice(lag);
+  const a =
+    values.slice(
+      0,
+      values.length - lag
+    );
 
-  return correlation(a, b);
+  const b =
+    values.slice(lag);
+
+  return correlation(
+    a,
+    b
+  );
+}
+
+
+/* ============================================================
+ * ROBUST STATISTICS
+ * ============================================================ */
+
+/*
+ * Uses the interquartile range to reduce the influence
+ * of occasional pitch-tracking errors.
+ */
+function robustCoefficientOfVariation(
+  values: number[]
+): number {
+  if (values.length < 3) {
+    return 0;
+  }
+
+  const m =
+    Math.abs(
+      median(values)
+    );
+
+  if (
+    m < EPSILON
+  ) {
+    return 0;
+  }
+
+  const q1 =
+    percentile(
+      values,
+      0.25
+    );
+
+  const q3 =
+    percentile(
+      values,
+      0.75
+    );
+
+  const iqr =
+    Math.max(
+      0,
+      q3 - q1
+    );
+
+  return (
+    (iqr / 1.349) /
+    m
+  );
+}
+
+
+/*
+ * Removes extreme pitch outliers while retaining
+ * the natural contour.
+ */
+function filterPitchOutliers(
+  pitches: number[]
+): number[] {
+  if (
+    pitches.length < 5
+  ) {
+    return [...pitches];
+  }
+
+  const medianPitch =
+    median(pitches);
+
+  if (
+    medianPitch <= 0
+  ) {
+    return [];
+  }
+
+  const deviations =
+    pitches.map(
+      pitch =>
+        Math.abs(
+          pitch -
+          medianPitch
+        )
+    );
+
+  const medianDeviation =
+    median(deviations);
+
+  const threshold =
+    Math.max(
+      medianPitch * 0.35,
+      medianDeviation * 4
+    );
+
+  return pitches.filter(
+    pitch =>
+      Math.abs(
+        pitch -
+        medianPitch
+      ) <= threshold
+  );
 }
 
 
@@ -437,15 +684,24 @@ function autocorrelationAtLag(
 function createHannWindow(
   size: number
 ): Float64Array {
-  const window = new Float64Array(size);
+  const window =
+    new Float64Array(size);
 
-  for (let i = 0; i < size; i++) {
+  for (
+    let i = 0;
+    i < size;
+    i++
+  ) {
     window[i] =
       0.5 *
       (
         1 -
         Math.cos(
-          (2 * Math.PI * i) /
+          (
+            2 *
+            Math.PI *
+            i
+          ) /
           (size - 1)
         )
       );
@@ -456,7 +712,9 @@ function createHannWindow(
 
 
 const HANN_WINDOW =
-  createHannWindow(FRAME_SIZE);
+  createHannWindow(
+    FRAME_SIZE
+  );
 
 
 /* ============================================================
@@ -469,15 +727,26 @@ function fft(
   real: Float64Array;
   imag: Float64Array;
 } {
-  const n = input.length;
+  const n =
+    input.length;
 
-  const real = new Float64Array(input);
-  const imag = new Float64Array(n);
+  const real =
+    new Float64Array(
+      input
+    );
+
+  const imag =
+    new Float64Array(n);
 
   let j = 0;
 
-  for (let i = 1; i < n; i++) {
-    let bit = n >> 1;
+  for (
+    let i = 1;
+    i < n;
+    i++
+  ) {
+    let bit =
+      n >> 1;
 
     while (j & bit) {
       j ^= bit;
@@ -487,10 +756,14 @@ function fft(
     j ^= bit;
 
     if (i < j) {
-      const temp = real[i];
+      const temp =
+        real[i];
 
-      real[i] = real[j];
-      real[j] = temp;
+      real[i] =
+        real[j];
+
+      real[j] =
+        temp;
     }
   }
 
@@ -500,7 +773,8 @@ function fft(
     length <<= 1
   ) {
     const angle =
-      (-2 * Math.PI) / length;
+      (-2 * Math.PI) /
+      length;
 
     const wReal =
       Math.cos(angle);
@@ -516,29 +790,37 @@ function fft(
       let currentReal = 1;
       let currentImag = 0;
 
-      const half = length >> 1;
+      const half =
+        length >> 1;
 
       for (
         let k = 0;
         k < half;
         k++
       ) {
-        const evenIndex = i + k;
+        const evenIndex =
+          i + k;
+
         const oddIndex =
           evenIndex + half;
 
         const oddReal =
           real[oddIndex];
+
         const oddImag =
           imag[oddIndex];
 
         const transformedReal =
-          currentReal * oddReal -
-          currentImag * oddImag;
+          currentReal *
+            oddReal -
+          currentImag *
+            oddImag;
 
         const transformedImag =
-          currentReal * oddImag +
-          currentImag * oddReal;
+          currentReal *
+            oddImag +
+          currentImag *
+            oddReal;
 
         real[oddIndex] =
           real[evenIndex] -
@@ -555,12 +837,16 @@ function fft(
           transformedImag;
 
         const nextReal =
-          currentReal * wReal -
-          currentImag * wImag;
+          currentReal *
+            wReal -
+          currentImag *
+            wImag;
 
         currentImag =
-          currentReal * wImag +
-          currentImag * wReal;
+          currentReal *
+            wImag +
+          currentImag *
+            wReal;
 
         currentReal =
           nextReal;
@@ -614,18 +900,22 @@ function detectPitch(
 } {
   const minLag =
     Math.floor(
-      sampleRate / MAX_PITCH
+      sampleRate /
+      MAX_PITCH
     );
 
   const maxLag =
     Math.min(
       Math.floor(
-        sampleRate / MIN_PITCH
+        sampleRate /
+        MIN_PITCH
       ),
       frame.length - 2
     );
 
-  if (maxLag <= minLag) {
+  if (
+    maxLag <= minLag
+  ) {
     return {
       pitch: 0,
       confidence: 0,
@@ -634,13 +924,17 @@ function detectPitch(
 
   let energy = 0;
 
-  for (const sample of frame) {
-    energy += sample * sample;
+  for (
+    const sample of frame
+  ) {
+    energy +=
+      sample * sample;
   }
 
   if (
     energy <
-    frame.length * 0.000001
+    frame.length *
+    0.000001
   ) {
     return {
       pitch: 0,
@@ -663,18 +957,31 @@ function detectPitch(
     const limit =
       frame.length - lag;
 
-    for (let i = 0; i < limit; i++) {
-      const a = frame[i];
-      const b = frame[i + lag];
+    for (
+      let i = 0;
+      i < limit;
+      i++
+    ) {
+      const a =
+        frame[i];
 
-      numerator += a * b;
-      energyA += a * a;
-      energyB += b * b;
+      const b =
+        frame[i + lag];
+
+      numerator +=
+        a * b;
+
+      energyA +=
+        a * a;
+
+      energyB +=
+        b * b;
     }
 
     const denominator =
       Math.sqrt(
-        energyA * energyB
+        energyA *
+        energyB
       );
 
     if (
@@ -685,19 +992,25 @@ function detectPitch(
     }
 
     const value =
-      numerator / denominator;
+      numerator /
+      denominator;
 
     if (
-      value > bestCorrelation
+      value >
+      bestCorrelation
     ) {
-      bestCorrelation = value;
-      bestLag = lag;
+      bestCorrelation =
+        value;
+
+      bestLag =
+        lag;
     }
   }
 
   if (
     bestLag < 0 ||
-    bestCorrelation < 0.22
+    bestCorrelation <
+      0.22
   ) {
     return {
       pitch: 0,
@@ -706,47 +1019,66 @@ function detectPitch(
   }
 
   /*
-   * Parabolic interpolation around the best lag.
+   * Parabolic interpolation.
    */
-  let refinedLag = bestLag;
+  let refinedLag =
+    bestLag;
 
   if (
     bestLag > minLag &&
     bestLag < maxLag
   ) {
-    const correlationAtLag = (
-      lag: number
-    ): number => {
-      let numerator = 0;
-      let energyA = 0;
-      let energyB = 0;
+    const correlationAtLag =
+      (
+        lag: number
+      ): number => {
+        let numerator = 0;
+        let energyA = 0;
+        let energyB = 0;
 
-      const limit =
-        frame.length - lag;
+        const limit =
+          frame.length -
+          lag;
 
-      for (let i = 0; i < limit; i++) {
-        const a = frame[i];
-        const b = frame[i + lag];
+        for (
+          let i = 0;
+          i < limit;
+          i++
+        ) {
+          const a =
+            frame[i];
 
-        numerator += a * b;
-        energyA += a * a;
-        energyB += b * b;
-      }
+          const b =
+            frame[i + lag];
 
-      const denominator =
-        Math.sqrt(
-          energyA * energyB
+          numerator +=
+            a * b;
+
+          energyA +=
+            a * a;
+
+          energyB +=
+            b * b;
+        }
+
+        const denominator =
+          Math.sqrt(
+            energyA *
+            energyB
+          );
+
+        if (
+          denominator <
+          EPSILON
+        ) {
+          return 0;
+        }
+
+        return (
+          numerator /
+          denominator
         );
-
-      if (
-        denominator <
-        EPSILON
-      ) {
-        return 0;
-      }
-
-      return numerator / denominator;
-    };
+      };
 
     const left =
       correlationAtLag(
@@ -769,18 +1101,23 @@ function detectPitch(
       right;
 
     if (
-      Math.abs(denominator) >
-      EPSILON
+      Math.abs(
+        denominator
+      ) > EPSILON
     ) {
       const shift =
         0.5 *
-        (left - right) /
+        (
+          left -
+          right
+        ) /
         denominator;
 
       if (
         Math.abs(shift) <= 1
       ) {
-        refinedLag += shift;
+        refinedLag +=
+          shift;
       }
     }
   }
@@ -795,7 +1132,8 @@ function detectPitch(
   }
 
   const pitch =
-    sampleRate / refinedLag;
+    sampleRate /
+    refinedLag;
 
   if (
     pitch < MIN_PITCH ||
@@ -809,9 +1147,13 @@ function detectPitch(
 
   return {
     pitch,
+
     confidence:
       clamp(
-        (bestCorrelation - 0.15) /
+        (
+          bestCorrelation -
+          0.15
+        ) /
         0.75
       ),
   };
@@ -835,14 +1177,19 @@ function calculateHarmonicRatio(
   }
 
   const binWidth =
-    sampleRate / FRAME_SIZE;
+    sampleRate /
+    FRAME_SIZE;
 
   let harmonicEnergy = 0;
   let totalEnergy = 0;
 
-  for (const magnitude of magnitudes) {
+  for (
+    const magnitude
+    of magnitudes
+  ) {
     totalEnergy +=
-      magnitude * magnitude;
+      magnitude *
+      magnitude;
   }
 
   if (
@@ -858,7 +1205,8 @@ function calculateHarmonicRatio(
     harmonic++
   ) {
     const frequency =
-      pitch * harmonic;
+      pitch *
+      harmonic;
 
     if (
       frequency >=
@@ -869,7 +1217,8 @@ function calculateHarmonicRatio(
 
     const centerBin =
       Math.round(
-        frequency / binWidth
+        frequency /
+        binWidth
       );
 
     for (
@@ -878,11 +1227,13 @@ function calculateHarmonicRatio(
       offset++
     ) {
       const index =
-        centerBin + offset;
+        centerBin +
+        offset;
 
       if (
         index >= 0 &&
-        index < magnitudes.length
+        index <
+          magnitudes.length
       ) {
         harmonicEnergy +=
           magnitudes[index] *
@@ -910,7 +1261,8 @@ function calculateChroma(
     new Array(12).fill(0);
 
   const binWidth =
-    sampleRate / FRAME_SIZE;
+    sampleRate /
+    FRAME_SIZE;
 
   for (
     let i = 1;
@@ -931,13 +1283,14 @@ function calculateChroma(
       69 +
       12 *
       Math.log2(
-        frequency / 440
+        frequency /
+        440
       );
 
     const pitchClass =
       (
         Math.round(midi) %
-        12 +
+          12 +
         12
       ) % 12;
 
@@ -953,13 +1306,15 @@ function calculateChroma(
     );
 
   if (
-    total < EPSILON
+    total <
+    EPSILON
   ) {
     return chroma;
   }
 
   return chroma.map(
-    value => value / total
+    value =>
+      value / total
   );
 }
 
@@ -988,7 +1343,8 @@ function analyzeFrame(
     i++
   ) {
     const value =
-      i < frameData.length
+      i <
+      frameData.length
         ? safeNumber(
             frameData[i]
           )
@@ -1007,12 +1363,14 @@ function analyzeFrame(
     if (
       i > 0 &&
       (
-        value >= 0 &&
-        frameData[i - 1] < 0
-      ) ||
-      (
-        value < 0 &&
-        frameData[i - 1] >= 0
+        (
+          value >= 0 &&
+          frameData[i - 1] < 0
+        ) ||
+        (
+          value < 0 &&
+          frameData[i - 1] >= 0
+        )
       )
     ) {
       zeroCrossings++;
@@ -1058,8 +1416,10 @@ function analyzeFrame(
   ) {
     const magnitude =
       Math.sqrt(
-        real[i] * real[i] +
-        imag[i] * imag[i]
+        real[i] *
+          real[i] +
+        imag[i] *
+          imag[i]
       );
 
     magnitudes[i] =
@@ -1097,14 +1457,13 @@ function analyzeFrame(
         totalMagnitude
       : 0;
 
-  let cumulative =
-    0;
+  let cumulative = 0;
 
-  let rolloff =
-    0;
+  let rolloff = 0;
 
   const target =
-    totalMagnitude * 0.85;
+    totalMagnitude *
+    0.85;
 
   for (
     let i = 0;
@@ -1115,7 +1474,8 @@ function analyzeFrame(
       magnitudes[i];
 
     if (
-      cumulative >= target
+      cumulative >=
+      target
     ) {
       rolloff =
         i *
@@ -1127,7 +1487,7 @@ function analyzeFrame(
   }
 
   /*
-   * Spectral flatness
+   * Spectral flatness.
    */
   let logSum = 0;
 
@@ -1159,7 +1519,8 @@ function analyzeFrame(
   const geometricMean =
     validBins > 0
       ? Math.exp(
-          logSum / validBins
+          logSum /
+          validBins
         )
       : 0;
 
@@ -1177,7 +1538,7 @@ function analyzeFrame(
       : 0;
 
   /*
-   * Spectral entropy
+   * Spectral entropy.
    */
   let entropy = 0;
 
@@ -1215,7 +1576,7 @@ function analyzeFrame(
   }
 
   /*
-   * Spectral peakiness
+   * Spectral peakiness.
    */
   const peakiness =
     totalMagnitude >
@@ -1224,9 +1585,6 @@ function analyzeFrame(
         totalMagnitude
       : 0;
 
-  /*
-   * Pitch
-   */
   const {
     pitch,
     confidence,
@@ -1235,9 +1593,6 @@ function analyzeFrame(
     sampleRate
   );
 
-  /*
-   * Harmonic ratio
-   */
   const harmonicRatio =
     calculateHarmonicRatio(
       magnitudes,
@@ -1245,9 +1600,6 @@ function analyzeFrame(
       sampleRate
     );
 
-  /*
-   * Chroma
-   */
   const chroma =
     calculateChroma(
       magnitudes,
@@ -1255,7 +1607,7 @@ function analyzeFrame(
     );
 
   /*
-   * Spectral flux
+   * Spectral flux.
    */
   let spectralFlux = 0;
 
@@ -1280,7 +1632,8 @@ function analyzeFrame(
       const difference =
         Math.max(
           0,
-          current - previous
+          current -
+            previous
         );
 
       sum +=
@@ -1350,14 +1703,9 @@ function extractFrames(
     return [];
   }
 
-  const frames: FrameAnalysis[] =
-    [];
+  const frames:
+    FrameAnalysis[] = [];
 
-  /*
-   * For long files we sample frames
-   * across the complete recording rather
-   * than only analyzing the beginning.
-   */
   const maximumStart =
     audioData.length -
     FRAME_SIZE;
@@ -1421,10 +1769,6 @@ function extractFrames(
         previousMagnitudes
       );
 
-    /*
-     * Reconstruct magnitude array
-     * for the next frame's flux comparison.
-     */
     const windowed =
       new Float64Array(
         FRAME_SIZE
@@ -1458,8 +1802,10 @@ function extractFrames(
     ) {
       magnitudes[i] =
         Math.sqrt(
-          real[i] * real[i] +
-          imag[i] * imag[i]
+          real[i] *
+            real[i] +
+          imag[i] *
+            imag[i]
         );
     }
 
@@ -1499,39 +1845,58 @@ function collectFeatureArrays(
   frames: FrameAnalysis[]
 ): FeatureArrays {
   return {
-    rms: frames.map(
-      frame => frame.rms
-    ),
-
-    zcr: frames.map(
-      frame => frame.zcr
-    ),
-
-    centroid: frames.map(
-      frame => frame.centroid
-    ),
-
-    rolloff: frames.map(
-      frame => frame.rolloff
-    ),
-
-    flatness: frames.map(
-      frame => frame.flatness
-    ),
-
-    entropy: frames.map(
-      frame => frame.entropy
-    ),
-
-    peakiness: frames.map(
-      frame => frame.peakiness
-    ),
-
-    pitch: frames
-      .map(frame => frame.pitch)
-      .filter(
-        pitch => pitch > 0
+    rms:
+      frames.map(
+        frame =>
+          frame.rms
       ),
+
+    zcr:
+      frames.map(
+        frame =>
+          frame.zcr
+      ),
+
+    centroid:
+      frames.map(
+        frame =>
+          frame.centroid
+      ),
+
+    rolloff:
+      frames.map(
+        frame =>
+          frame.rolloff
+      ),
+
+    flatness:
+      frames.map(
+        frame =>
+          frame.flatness
+      ),
+
+    entropy:
+      frames.map(
+        frame =>
+          frame.entropy
+      ),
+
+    peakiness:
+      frames.map(
+        frame =>
+          frame.peakiness
+      ),
+
+    pitch:
+      frames
+        .map(
+          frame =>
+            frame.pitch
+        )
+        .filter(
+          pitch =>
+            pitch > 0
+        ),
 
     pitchConfidence:
       frames.map(
@@ -1539,10 +1904,11 @@ function collectFeatureArrays(
           frame.pitchConfidence
       ),
 
-    harmonic: frames.map(
-      frame =>
-        frame.harmonicRatio
-    ),
+    harmonic:
+      frames.map(
+        frame =>
+          frame.harmonicRatio
+      ),
 
     spectralFlux:
       frames.map(
@@ -1550,10 +1916,11 @@ function collectFeatureArrays(
           frame.spectralFlux
       ),
 
-    chroma: frames.map(
-      frame =>
-        frame.chroma
-    ),
+    chroma:
+      frames.map(
+        frame =>
+          frame.chroma
+      ),
   };
 }
 
@@ -1566,8 +1933,7 @@ function calculateSegmentConsistency(
   frames: FrameAnalysis[]
 ): number {
   if (
-    frames.length <
-    8
+    frames.length < 8
   ) {
     return 0.5;
   }
@@ -1586,8 +1952,8 @@ function calculateSegmentConsistency(
     return 0.5;
   }
 
-  const segments: FrameAnalysis[][] =
-    [];
+  const segments:
+    FrameAnalysis[][] = [];
 
   for (
     let s = 0;
@@ -1646,13 +2012,18 @@ function calculateSegmentConsistency(
         )
     );
 
-  const pitchVariation =
-    coefficientOfVariation(
-      segmentPitchMeans.filter(
-        value =>
-          value > 0
-      )
+  const validPitchMeans =
+    segmentPitchMeans.filter(
+      value =>
+        value > 0
     );
+
+  const pitchVariation =
+    validPitchMeans.length >= 2
+      ? robustCoefficientOfVariation(
+          validPitchMeans
+        )
+      : 0;
 
   const energyVariation =
     coefficientOfVariation(
@@ -1660,11 +2031,13 @@ function calculateSegmentConsistency(
     );
 
   const pitchConsistency =
-    clamp(
-      1 -
-      pitchVariation /
-      0.30
-    );
+    validPitchMeans.length >= 2
+      ? clamp(
+          1 -
+          pitchVariation /
+          0.30
+        )
+      : 0.5;
 
   const energyConsistency =
     clamp(
@@ -1690,8 +2063,7 @@ function calculateChromaStability(
   chromaFrames: number[][]
 ): number {
   if (
-    chromaFrames.length <
-    2
+    chromaFrames.length < 2
   ) {
     return 0.5;
   }
@@ -1769,19 +2141,19 @@ function calculateFormantStability(
   rolloffs: number[]
 ): number {
   if (
-    centroids.length <
-    3
+    centroids.length < 3 ||
+    rolloffs.length < 3
   ) {
     return 0.5;
   }
 
   const centroidCV =
-    coefficientOfVariation(
+    robustCoefficientOfVariation(
       centroids
     );
 
   const rolloffCV =
-    coefficientOfVariation(
+    robustCoefficientOfVariation(
       rolloffs
     );
 
@@ -1814,7 +2186,8 @@ function calculateFormantStability(
 
 export function extractAudioFeatures(
   audioData: Float32Array,
-  sampleRate = SAMPLE_RATE_FALLBACK
+  sampleRate =
+    SAMPLE_RATE_FALLBACK
 ): AudioFeatures {
   const frames =
     extractFrames(
@@ -1833,58 +2206,163 @@ export function extractAudioFeatures(
       frames
     );
 
-  const pitchValues =
-    arrays.pitch;
+  const activeFrames =
+    frames.filter(
+      frame =>
+        frame.rms >
+        0.008
+    );
+
+  const activeCentroids =
+    activeFrames
+      .map(
+        frame =>
+          frame.centroid
+      )
+      .filter(
+        value =>
+          value > 0
+      );
+
+  const activeRolloffs =
+    activeFrames
+      .map(
+        frame =>
+          frame.rolloff
+      )
+      .filter(
+        value =>
+          value > 0
+      );
+
+  const voicedPitches =
+    filterPitchOutliers(
+      frames
+        .filter(
+          frame =>
+            frame.pitch > 0 &&
+            frame.pitchConfidence >=
+              0.30 &&
+            frame.rms >
+              0.008
+        )
+        .map(
+          frame =>
+            frame.pitch
+        )
+    );
 
   const pitchMean =
-    mean(pitchValues);
+    mean(
+      voicedPitches
+    );
 
   const pitchVariation =
     pitchMean > 0
       ? clamp(
-          standardDeviation(
-            pitchValues
-          ) /
-          pitchMean
+          robustCoefficientOfVariation(
+            voicedPitches
+          )
         )
       : 0;
 
   const temporalModulation =
-    clamp(
-      coefficientOfVariation(
-        arrays.rms
-      )
-    );
+    activeFrames.length >= 2
+      ? clamp(
+          coefficientOfVariation(
+            activeFrames.map(
+              frame =>
+                frame.rms
+            )
+          )
+        )
+      : 0;
 
   const chromaStability =
     calculateChromaStability(
-      arrays.chroma
+      activeFrames.map(
+        frame =>
+          frame.chroma
+      )
     );
 
   const formantStability =
     calculateFormantStability(
-      arrays.centroid,
-      arrays.rolloff
+      activeCentroids.length >= 3
+        ? activeCentroids
+        : arrays.centroid,
+      activeRolloffs.length >= 3
+        ? activeRolloffs
+        : arrays.rolloff
     );
+
+  const activeRms =
+    activeFrames.map(
+      frame =>
+        frame.rms
+    );
+
+  const activeHarmonic =
+    activeFrames
+      .filter(
+        frame =>
+          frame.pitch > 0 &&
+          frame.pitchConfidence >=
+            0.30
+      )
+      .map(
+        frame =>
+          frame.harmonicRatio
+      );
 
   return {
     zeroCrossingRate:
-      mean(arrays.zcr),
+      mean(
+        activeFrames.length
+          ? activeFrames.map(
+              frame =>
+                frame.zcr
+            )
+          : arrays.zcr
+      ),
 
     rmsEnergy:
-      mean(arrays.rms),
+      mean(
+        activeRms.length
+          ? activeRms
+          : arrays.rms
+      ),
 
     spectralCentroid:
-      mean(arrays.centroid),
+      mean(
+        activeCentroids.length
+          ? activeCentroids
+          : arrays.centroid
+      ),
 
     spectralRolloff:
-      mean(arrays.rolloff),
+      mean(
+        activeRolloffs.length
+          ? activeRolloffs
+          : arrays.rolloff
+      ),
 
     spectralFlatness:
-      mean(arrays.flatness),
+      mean(
+        activeFrames.length
+          ? activeFrames.map(
+              frame =>
+                frame.flatness
+            )
+          : arrays.flatness
+      ),
 
     harmonicRatio:
-      mean(arrays.harmonic),
+      mean(
+        activeHarmonic.length
+          ? activeHarmonic
+          : arrays.harmonic
+      ),
 
     pitchMean,
 
@@ -1917,6 +2395,10 @@ function calculateDiagnostics(
       frames
     );
 
+  /*
+   * Only active frames should participate
+   * in energy/spectral regularity.
+   */
   const activeFrames =
     frames.filter(
       frame =>
@@ -1924,6 +2406,10 @@ function calculateDiagnostics(
         0.008
     );
 
+  /*
+   * Only confident voiced frames should
+   * participate in pitch/harmonic analysis.
+   */
   const voicedFrames =
     frames.filter(
       frame =>
@@ -1934,23 +2420,27 @@ function calculateDiagnostics(
           0.008
     );
 
+  const voicedPitches =
+    filterPitchOutliers(
+      voicedFrames.map(
+        frame =>
+          frame.pitch
+      )
+    );
+
   /*
    * ----------------------------------------------------------
    * PITCH DIAGNOSTICS
    * ----------------------------------------------------------
    */
 
-  const voicedPitches =
-    voicedFrames.map(
-      frame =>
-        frame.pitch
+  const pitchMean =
+    mean(
+      voicedPitches
     );
 
-  const pitchMean =
-    mean(voicedPitches);
-
   const pitchCV =
-    coefficientOfVariation(
+    robustCoefficientOfVariation(
       voicedPitches
     );
 
@@ -1961,17 +2451,19 @@ function calculateDiagnostics(
 
   const pitchStepVariation =
     pitchDifferences.length
-      ? mean(
+      ? median(
           pitchDifferences
         )
       : 0;
 
   const pitchRegularity =
-    clamp(
-      1 -
-      pitchCV /
-      0.30
-    );
+    voicedPitches.length >= 4
+      ? clamp(
+          1 -
+          pitchCV /
+          0.30
+        )
+      : 0.5;
 
   const pitchStepEntropy =
     entropyFromHistogram(
@@ -1980,20 +2472,22 @@ function calculateDiagnostics(
     );
 
   const pitchRepetition =
-    voicedPitches.length >=
-    6
+    voicedPitches.length >= 8
       ? clamp(
-          autocorrelationAtLag(
-            voicedPitches,
-            Math.max(
-              1,
-              Math.floor(
-                voicedPitches.length /
-                5
+          (
+            autocorrelationAtLag(
+              voicedPitches,
+              Math.max(
+                1,
+                Math.floor(
+                  voicedPitches.length /
+                  5
+                )
               )
-            )
-          ) + 1
-        ) / 2
+            ) + 1
+          ) /
+          2
+        )
       : 0.5;
 
   const pitchSmoothness =
@@ -2012,29 +2506,37 @@ function calculateDiagnostics(
    * ----------------------------------------------------------
    */
 
+  const activeEnergy =
+    activeFrames.map(
+      frame =>
+        frame.rms
+    );
+
   const energyCV =
     coefficientOfVariation(
-      arrays.rms
+      activeEnergy
     );
 
   const energyDifferences =
     relativeDifferences(
-      arrays.rms
+      activeEnergy
     );
 
   const energyStepVariation =
     energyDifferences.length
-      ? mean(
+      ? median(
           energyDifferences
         )
       : 0;
 
   const energyRegularity =
-    clamp(
-      1 -
-      energyCV /
-      0.70
-    );
+    activeEnergy.length >= 4
+      ? clamp(
+          1 -
+          energyCV /
+          0.70
+        )
+      : 0.5;
 
   const energySmoothness =
     clamp(
@@ -2049,65 +2551,119 @@ function calculateDiagnostics(
    * ----------------------------------------------------------
    */
 
+  const activeCentroids =
+    activeFrames
+      .map(
+        frame =>
+          frame.centroid
+      )
+      .filter(
+        value =>
+          value > 0
+      );
+
+  const activeRolloffs =
+    activeFrames
+      .map(
+        frame =>
+          frame.rolloff
+      )
+      .filter(
+        value =>
+          value > 0
+      );
+
   const spectralCV =
-    coefficientOfVariation(
-      arrays.centroid
+    robustCoefficientOfVariation(
+      activeCentroids
     );
 
   const rolloffCV =
-    coefficientOfVariation(
-      arrays.rolloff
+    robustCoefficientOfVariation(
+      activeRolloffs
+    );
+
+  const activeFlux =
+    activeFrames.map(
+      frame =>
+        frame.spectralFlux
     );
 
   const fluxMean =
     mean(
-      arrays.spectralFlux
+      activeFlux
     );
 
   const fluxVariation =
     coefficientOfVariation(
-      arrays.spectralFlux
+      activeFlux
     );
 
   const spectralRegularity =
-    clamp(
-      1 -
-      (
-        spectralCV +
-        rolloffCV
-      ) /
-      0.70
-    );
+    activeCentroids.length >= 4
+      ? clamp(
+          1 -
+          (
+            spectralCV +
+            rolloffCV
+          ) /
+          0.70
+        )
+      : 0.5;
 
   const spectralStability =
-    clamp(
-      1 -
-      fluxMean /
-      2500
-    );
+    activeFlux.length
+      ? clamp(
+          1 -
+          fluxMean /
+          2500
+        )
+      : 0.5;
 
   /*
    * ----------------------------------------------------------
    * HARMONIC DIAGNOSTICS
    * ----------------------------------------------------------
+   *
+   * IMPORTANT:
+   * Previous version calculated harmonic CV over ALL frames,
+   * including unvoiced frames where harmonicRatio = 0.
+   *
+   * That could make harmonicConsistency collapse to zero.
    */
+
+  const voicedHarmonics =
+    voicedFrames
+      .map(
+        frame =>
+          frame.harmonicRatio
+      )
+      .filter(
+        value =>
+          Number.isFinite(
+            value
+          ) &&
+          value > 0
+      );
 
   const harmonicMean =
     mean(
-      arrays.harmonic
+      voicedHarmonics
     );
 
   const harmonicCV =
     coefficientOfVariation(
-      arrays.harmonic
+      voicedHarmonics
     );
 
   const harmonicConsistency =
-    clamp(
-      1 -
-      harmonicCV /
-      0.70
-    );
+    voicedHarmonics.length >= 4
+      ? clamp(
+          1 -
+          harmonicCV /
+          0.70
+        )
+      : 0.5;
 
   /*
    * ----------------------------------------------------------
@@ -2148,38 +2704,38 @@ function calculateDiagnostics(
   const pitchMicroVariation =
     voicedPitches.length >= 3
       ? clamp(
-          mean(
+          median(
             relativeDifferences(
               voicedPitches
             )
           ) /
           0.20
         )
-      : 0;
+      : 0.5;
 
   const energyMicroVariation =
-    arrays.rms.length >= 3
+    activeEnergy.length >= 3
       ? clamp(
-          mean(
+          median(
             relativeDifferences(
-              arrays.rms
+              activeEnergy
             )
           ) /
           0.50
         )
-      : 0;
+      : 0.5;
 
   const spectralMicroVariation =
-    arrays.centroid.length >= 3
+    activeCentroids.length >= 3
       ? clamp(
-          mean(
+          median(
             relativeDifferences(
-              arrays.centroid
+              activeCentroids
             )
           ) /
           0.35
         )
-      : 0;
+      : 0.5;
 
   const microVariation =
     clamp(
@@ -2197,14 +2753,14 @@ function calculateDiagnostics(
    */
 
   const rmsRepetition =
-    arrays.rms.length >= 8
+    activeEnergy.length >= 8
       ? Math.abs(
           autocorrelationAtLag(
-            arrays.rms,
+            activeEnergy,
             Math.max(
               1,
               Math.floor(
-                arrays.rms.length /
+                activeEnergy.length /
                 5
               )
             )
@@ -2213,14 +2769,14 @@ function calculateDiagnostics(
       : 0;
 
   const spectralRepetition =
-    arrays.centroid.length >= 8
+    activeCentroids.length >= 8
       ? Math.abs(
           autocorrelationAtLag(
-            arrays.centroid,
+            activeCentroids,
             Math.max(
               1,
               Math.floor(
-                arrays.centroid.length /
+                activeCentroids.length /
                 5
               )
             )
@@ -2249,11 +2805,34 @@ function calculateDiagnostics(
 
   /*
    * ----------------------------------------------------------
+   * CHROMA
+   * ----------------------------------------------------------
+   */
+
+  const chromaStability =
+    calculateChromaStability(
+      activeFrames.map(
+        frame =>
+          frame.chroma
+      )
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * FORMANT PROXY
+   * ----------------------------------------------------------
+   */
+
+  const formantStability =
+    calculateFormantStability(
+      activeCentroids,
+      activeRolloffs
+    );
+
+  /*
+   * ----------------------------------------------------------
    * TESTS
    * ----------------------------------------------------------
-   *
-   * These are intentionally independent heuristic signals.
-   * No single test is allowed to determine the verdict.
    */
 
   let syntheticTests = 0;
@@ -2263,11 +2842,14 @@ function calculateDiagnostics(
   let manipulationTests = 0;
 
   /*
+   * ----------------------------------------------------------
    * SYNTHETIC TEST 1
-   * Extremely low pitch variation
+   * Robustly low pitch variation.
+   * ----------------------------------------------------------
    */
+
   if (
-    voicedPitches.length >= 6 &&
+    voicedPitches.length >= 8 &&
     pitchCV < 0.055
   ) {
     syntheticTests++;
@@ -2275,22 +2857,26 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 2
-   * Strong pitch repetition
+   * Strong pitch repetition.
+   * ----------------------------------------------------------
    */
+
   if (
-    voicedPitches.length >= 8 &&
-    pitchRepetition > 0.72
+    voicedPitches.length >= 10 &&
+    pitchRepetition > 0.76
   ) {
     syntheticTests++;
   }
 
   /*
    * SYNTHETIC TEST 3
-   * Excessively smooth pitch contour
+   * Very smooth pitch contour.
+   * ----------------------------------------------------------
    */
+
   if (
-    voicedPitches.length >= 8 &&
-    pitchSmoothness > 0.88 &&
+    voicedPitches.length >= 10 &&
+    pitchSmoothness > 0.90 &&
     pitchStepEntropy < 0.45
   ) {
     syntheticTests++;
@@ -2298,10 +2884,12 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 4
-   * Very stable energy
+   * Very stable active energy.
+   * ----------------------------------------------------------
    */
+
   if (
-    activeFrames.length >= 8 &&
+    activeEnergy.length >= 10 &&
     energyRegularity > 0.88 &&
     energyStepVariation < 0.12
   ) {
@@ -2310,9 +2898,12 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 5
-   * Very stable spectral movement
+   * Stable active spectrum.
+   * ----------------------------------------------------------
    */
+
   if (
+    activeCentroids.length >= 10 &&
     spectralRegularity > 0.88 &&
     spectralStability > 0.90
   ) {
@@ -2321,9 +2912,12 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 6
-   * Highly consistent harmonics
+   * Consistent harmonics.
+   * ----------------------------------------------------------
    */
+
   if (
+    voicedHarmonics.length >= 8 &&
     harmonicMean > 0.48 &&
     harmonicConsistency > 0.88
   ) {
@@ -2332,8 +2926,10 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 7
-   * Very low frame diversity
+   * Low frame diversity.
+   * ----------------------------------------------------------
    */
+
   if (
     microVariation < 0.20 &&
     segmentConsistency > 0.88
@@ -2343,8 +2939,10 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 8
-   * Temporal repetition
+   * Strong temporal repetition.
+   * ----------------------------------------------------------
    */
+
   if (
     temporalRepetition > 0.78
   ) {
@@ -2353,12 +2951,48 @@ function calculateDiagnostics(
 
   /*
    * SYNTHETIC TEST 9
-   * High voicing with highly regular pitch
+   * Highly regular voiced speech.
+   * ----------------------------------------------------------
    */
+
   if (
-    voicedFrameRatio > 0.78 &&
+    voicedFrameRatio > 0.70 &&
     pitchRegularity > 0.90 &&
     pitchStepEntropy < 0.50
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 10
+   *
+   * Cross-feature mismatch:
+   * stable harmonic/chroma structure while
+   * temporal variation remains unusually constrained.
+   *
+   * This is deliberately only one supporting signal.
+   */
+
+  if (
+    harmonicConsistency > 0.82 &&
+    chromaStability > 0.68 &&
+    temporalRepetition > 0.55 &&
+    microVariation < 0.38
+  ) {
+    syntheticTests++;
+  }
+
+  /*
+   * SYNTHETIC TEST 11
+   *
+   * Strong segment consistency combined with
+   * spectral/formant stability.
+   */
+
+  if (
+    segmentConsistency > 0.82 &&
+    formantStability > 0.80 &&
+    spectralRegularity > 0.78
   ) {
     syntheticTests++;
   }
@@ -2372,8 +3006,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 1
-   * Broad pitch movement
+   * Broad pitch movement.
+   * ----------------------------------------------------------
    */
+
   if (
     voicedPitches.length >= 8 &&
     pitchCV > 0.10
@@ -2383,8 +3019,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 2
-   * Diverse pitch steps
+   * Diverse pitch steps.
+   * ----------------------------------------------------------
    */
+
   if (
     voicedPitches.length >= 8 &&
     pitchStepEntropy > 0.55 &&
@@ -2395,10 +3033,12 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 3
-   * Energy dynamics
+   * Energy dynamics.
+   * ----------------------------------------------------------
    */
+
   if (
-    activeFrames.length >= 8 &&
+    activeEnergy.length >= 8 &&
     energyCV > 0.16 &&
     energyStepVariation > 0.08
   ) {
@@ -2407,8 +3047,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 4
-   * Spectral movement
+   * Spectral movement.
+   * ----------------------------------------------------------
    */
+
   if (
     fluxMean > 250 &&
     spectralCV > 0.08
@@ -2418,8 +3060,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 5
-   * Spectral variation
+   * Spectral variation.
+   * ----------------------------------------------------------
    */
+
   if (
     spectralCV > 0.12 ||
     rolloffCV > 0.12
@@ -2429,8 +3073,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 6
-   * Voiced/unvoiced variation
+   * Voiced/unvoiced variation.
+   * ----------------------------------------------------------
    */
+
   if (
     voicedFrameRatio > 0.15 &&
     voicedFrameRatio < 0.82
@@ -2440,8 +3086,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 7
-   * Micro variation
+   * Micro variation.
+   * ----------------------------------------------------------
    */
+
   if (
     microVariation > 0.35
   ) {
@@ -2450,8 +3098,10 @@ function calculateDiagnostics(
 
   /*
    * NATURAL TEST 8
-   * Low temporal repetition
+   * Low temporal repetition.
+   * ----------------------------------------------------------
    */
+
   if (
     temporalRepetition < 0.45
   ) {
@@ -2467,8 +3117,9 @@ function calculateDiagnostics(
 
   /*
    * MANIPULATION TEST 1
-   * Spectral instability
+   * Spectral instability.
    */
+
   if (
     spectralCV > 0.45 ||
     fluxVariation > 1.25
@@ -2478,8 +3129,9 @@ function calculateDiagnostics(
 
   /*
    * MANIPULATION TEST 2
-   * Abrupt energy changes
+   * Abrupt energy changes.
    */
+
   if (
     energyStepVariation > 0.70
   ) {
@@ -2488,12 +3140,8 @@ function calculateDiagnostics(
 
   /*
    * MANIPULATION TEST 3
-   * Chroma instability
+   * Chroma instability.
    */
-  const chromaStability =
-    calculateChromaStability(
-      arrays.chroma
-    );
 
   if (
     chromaStability < 0.20
@@ -2503,8 +3151,9 @@ function calculateDiagnostics(
 
   /*
    * MANIPULATION TEST 4
-   * Contradictory feature behaviour
+   * Contradictory behaviour.
    */
+
   if (
     spectralStability < 0.25 &&
     pitchRegularity > 0.80
@@ -2519,42 +3168,57 @@ function calculateDiagnostics(
    * ----------------------------------------------------------
    */
 
+  /*
+   * Synthetic evidence.
+   *
+   * The test count is deliberately weighted, but
+   * individual acoustic characteristics contribute too.
+   */
+
   const syntheticEvidence =
     clamp(
       (
         clamp(
-          syntheticTests / 9
-        ) * 0.35 +
+          syntheticTests / 11
+        ) * 0.38 +
 
         pitchRegularity *
-          0.12 +
+          0.10 +
 
         energyRegularity *
-          0.10 +
+          0.08 +
 
         spectralRegularity *
-          0.10 +
+          0.08 +
 
         harmonicConsistency *
-          0.10 +
+          0.08 +
 
         temporalRepetition *
           0.10 +
 
         segmentConsistency *
-          0.08 +
+          0.07 +
 
         (1 - microVariation) *
-          0.05
+          0.05 +
+
+        formantStability *
+          0.04
       )
     );
+
+
+  /*
+   * Natural evidence.
+   */
 
   const naturalEvidence =
     clamp(
       (
         clamp(
           naturalTests / 8
-        ) * 0.35 +
+        ) * 0.32 +
 
         clamp(
           pitchCV /
@@ -2574,7 +3238,7 @@ function calculateDiagnostics(
         clamp(
           fluxMean /
           2500
-        ) * 0.10 +
+        ) * 0.08 +
 
         microVariation *
           0.08 +
@@ -2583,9 +3247,17 @@ function calculateDiagnostics(
           0.08 +
 
         (1 - segmentConsistency) *
-          0.07
+          0.07 +
+
+        (1 - formantStability) *
+          0.05
       )
     );
+
+
+  /*
+   * Manipulation evidence.
+   */
 
   const manipulationEvidence =
     clamp(
@@ -2642,14 +3314,16 @@ function calculateDiagnostics(
     );
 
   const confidenceReliability =
-    clamp(
-      mean(
-        voicedFrames.map(
-          frame =>
-            frame.pitchConfidence
+    voicedFrames.length
+      ? clamp(
+          mean(
+            voicedFrames.map(
+              frame =>
+                frame.pitchConfidence
+            )
+          )
         )
-      )
-    );
+      : 0;
 
   const sampleReliability =
     clamp(
@@ -2673,6 +3347,11 @@ function calculateDiagnostics(
    * ----------------------------------------------------------
    * TEST AGREEMENT
    * ----------------------------------------------------------
+   *
+   * A major change from v5.1:
+   *
+   * Evidence disagreement now has a much stronger
+   * influence on confidence.
    */
 
   const evidenceValues = [
@@ -2682,7 +3361,9 @@ function calculateDiagnostics(
   ];
 
   const evidenceMean =
-    mean(evidenceValues);
+    mean(
+      evidenceValues
+    );
 
   const evidenceSpread =
     standardDeviation(
@@ -2693,7 +3374,7 @@ function calculateDiagnostics(
     clamp(
       1 -
       evidenceSpread /
-      0.50
+      0.35
     );
 
 
@@ -2832,9 +3513,11 @@ function classifyFromDiagnostics(
 
 
   /*
-   * Very weak samples should never produce
-   * a confident verdict.
+   * ----------------------------------------------------------
+   * WEAK SAMPLE
+   * ----------------------------------------------------------
    */
+
   if (
     sampleReliability <
     0.30
@@ -2857,8 +3540,11 @@ function classifyFromDiagnostics(
 
 
   /*
+   * ----------------------------------------------------------
    * MANIPULATION
+   * ----------------------------------------------------------
    */
+
   if (
     manipulationTests >= 2 &&
     manipulationEvidence >= 0.58 &&
@@ -2867,15 +3553,31 @@ function classifyFromDiagnostics(
     manipulationEvidence >
       realEvidence + 0.04
   ) {
-    const confidence =
+    let confidence =
+      55 +
+      manipulationEvidence *
+        28 +
+      sampleReliability *
+        8 +
+      testAgreement *
+        6;
+
+    /*
+     * Evidence disagreement caps certainty.
+     */
+    if (
+      testAgreement < 0.45
+    ) {
+      confidence =
+        Math.min(
+          confidence,
+          72
+        );
+    }
+
+    confidence =
       clamp(
-        55 +
-        manipulationEvidence *
-          30 +
-        sampleReliability *
-          10 +
-        testAgreement *
-          5,
+        confidence,
         50,
         88
       );
@@ -2896,23 +3598,27 @@ function classifyFromDiagnostics(
 
 
   /*
+   * ----------------------------------------------------------
    * AI-GENERATED
+   * ----------------------------------------------------------
    *
    * We require multiple independent signals.
    */
+
   const aiMargin =
     aiEvidence -
     realEvidence;
 
   const strongAI =
     syntheticTests >= 5 &&
-    aiEvidence >= 0.58 &&
-    aiMargin >= 0.08;
+    aiEvidence >= 0.52 &&
+    aiMargin >= 0.06 &&
+    testAgreement >= 0.25;
 
   const veryStrongAI =
     syntheticTests >= 4 &&
-    aiEvidence >= 0.70 &&
-    aiMargin >= 0.15 &&
+    aiEvidence >= 0.66 &&
+    aiMargin >= 0.12 &&
     testAgreement >= 0.34;
 
   if (
@@ -2920,15 +3626,24 @@ function classifyFromDiagnostics(
     veryStrongAI
   ) {
     let confidence =
-      54 +
-      aiEvidence * 34 +
+      53 +
+      aiEvidence * 32 +
       testAgreement * 8 +
-      sampleReliability * 6;
+      sampleReliability * 7;
 
     /*
-     * Do not let the heuristic engine
-     * display an unrealistic 99% certainty.
+     * Strong disagreement prevents excessive certainty.
      */
+    if (
+      testAgreement < 0.45
+    ) {
+      confidence =
+        Math.min(
+          confidence,
+          78
+        );
+    }
+
     confidence =
       clamp(
         confidence,
@@ -2946,14 +3661,26 @@ function classifyFromDiagnostics(
         ),
 
       explanation:
-        "Multiple independent acoustic patterns are consistent with synthetic speech, including pitch regularity, temporal consistency, spectral behaviour, and frame-level repetition. This is a heuristic result rather than forensic authentication.",
+        "Multiple independent acoustic patterns are consistent with synthetic speech, including pitch regularity, temporal consistency, spectral behaviour, harmonic structure, and frame-level repetition. This is a heuristic result rather than forensic authentication.",
     };
   }
 
 
   /*
+   * ----------------------------------------------------------
    * REAL VOICE
+   * ----------------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * v5.1 allowed a large natural-test count to produce
+   * high confidence even when the three evidence groups
+   * disagreed.
+   *
+   * v6.0 requires stronger agreement before calling a sample
+   * Real Voice with high confidence.
    */
+
   const realMargin =
     realEvidence -
     aiEvidence;
@@ -2961,12 +3688,14 @@ function classifyFromDiagnostics(
   const strongReal =
     naturalTests >= 4 &&
     realEvidence >= 0.55 &&
-    realMargin >= 0.08;
+    realMargin >= 0.08 &&
+    testAgreement >= 0.42;
 
   const veryStrongReal =
     naturalTests >= 5 &&
     realEvidence >= 0.65 &&
-    realMargin >= 0.12;
+    realMargin >= 0.12 &&
+    testAgreement >= 0.50;
 
   if (
     strongReal ||
@@ -2974,15 +3703,30 @@ function classifyFromDiagnostics(
   ) {
     let confidence =
       52 +
-      realEvidence * 32 +
-      testAgreement * 8 +
-      sampleReliability * 6;
+      realEvidence * 30 +
+      testAgreement * 10 +
+      sampleReliability * 8;
+
+    /*
+     * Do not allow disagreement to masquerade
+     * as strong real-voice certainty.
+     */
+
+    if (
+      testAgreement < 0.55
+    ) {
+      confidence =
+        Math.min(
+          confidence,
+          76
+        );
+    }
 
     confidence =
       clamp(
         confidence,
         50,
-        90
+        88
       );
 
     return {
@@ -2995,14 +3739,19 @@ function classifyFromDiagnostics(
         ),
 
       explanation:
-        "The recording contains several natural acoustic variations across pitch, energy, spectrum, and temporal behaviour. These characteristics are more consistent with naturally produced speech under this heuristic analysis.",
+        "The recording contains several acoustic variations that are more consistent with naturally produced speech under this heuristic analysis. The result is based on acoustic evidence rather than machine learning or forensic authentication.",
     };
   }
 
 
   /*
+   * ----------------------------------------------------------
    * INCONCLUSIVE
+   * ----------------------------------------------------------
+   *
+   * Mixed evidence should remain mixed.
    */
+
   const strongestEvidence =
     Math.max(
       aiEvidence,
@@ -3010,11 +3759,30 @@ function classifyFromDiagnostics(
       manipulationEvidence
     );
 
-  const confidence =
+  let confidence =
+    45 +
+    strongestEvidence * 22 +
+    sampleReliability * 8 +
+    testAgreement * 10;
+
+  /*
+   * If agreement is poor, the result should
+   * visibly communicate uncertainty.
+   */
+
+  if (
+    testAgreement < 0.40
+  ) {
+    confidence =
+      Math.min(
+        confidence,
+        62
+      );
+  }
+
+  confidence =
     clamp(
-      45 +
-      strongestEvidence * 25 +
-      sampleReliability * 10,
+      confidence,
       45,
       68
     );
@@ -3057,7 +3825,9 @@ function audioBufferToMono(
   if (
     channels === 1
   ) {
-    return audioBuffer.getChannelData(0);
+    return audioBuffer.getChannelData(
+      0
+    );
   }
 
   const mono =
@@ -3213,13 +3983,12 @@ function analyzeFloat32Data(
       diagnostics
     );
 
-  /*
-   * Very low voiced-frame count reduces
-   * confidence because pitch-based evidence
-   * becomes unreliable.
-   */
   let finalConfidence =
     classification.confidence;
+
+  /*
+   * Very low voiced-frame count reduces confidence.
+   */
 
   if (
     diagnostics.voicedFrames <
@@ -3233,9 +4002,10 @@ function analyzeFloat32Data(
   }
 
   /*
-   * Extremely short recordings should not
-   * produce very high confidence.
+   * Short recordings should not produce
+   * very high confidence.
    */
+
   if (
     diagnostics.totalFrames <
     25
@@ -3244,6 +4014,22 @@ function analyzeFloat32Data(
       Math.min(
         finalConfidence,
         76
+      );
+  }
+
+  /*
+   * Poor agreement is now explicitly
+   * reflected in final confidence.
+   */
+
+  if (
+    diagnostics.testAgreement <
+    0.35
+  ) {
+    finalConfidence =
+      Math.min(
+        finalConfidence,
+        68
       );
   }
 
@@ -3259,8 +4045,6 @@ function analyzeFloat32Data(
 
 /* ============================================================
  * PUBLIC analyzeAudio
- *
- * THIS IS THE IMPORTANT APP COMPATIBILITY FIX.
  *
  * App.tsx calls:
  *
@@ -3339,11 +4123,6 @@ export async function analyzeAudio(
   /*
    * ----------------------------------------------------------
    * NO AUDIO BUFFER
-   *
-   * App.tsx can call analyzeAudio(null, filename)
-   * for fallback/batch paths.
-   *
-   * Do NOT invent a real/fake result here.
    * ----------------------------------------------------------
    */
 
@@ -3403,9 +4182,6 @@ export async function analyzeAudio(
 
 /* ============================================================
  * SYNCHRONOUS COMPATIBILITY API
- *
- * Useful if another component directly supplies
- * Float32Array PCM data.
  * ============================================================ */
 
 export function analyzeAudioSync(
@@ -3428,12 +4204,10 @@ const HISTORY_KEY =
   "voxforensics_scan_history_v5";
 
 
-/*
- * Safely convert old/new stored records.
- *
- * This prevents an existing localStorage entry
- * from breaking the UI after the API update.
- */
+/* ============================================================
+ * NORMALIZE HISTORY
+ * ============================================================ */
+
 function normalizeHistoryRecord(
   item: any
 ): ScanRecord | null {
@@ -3444,10 +4218,10 @@ function normalizeHistoryRecord(
     return null;
   }
 
-
   /*
-   * Current format
+   * Current format.
    */
+
   if (
     item.result &&
     item.filename
@@ -3498,22 +4272,15 @@ function normalizeHistoryRecord(
 
 
   /*
-   * Legacy v5.1 format
-   *
-   * Old records looked more like:
-   * {
-   *   id,
-   *   verdict,
-   *   confidence,
-   *   features,
-   *   fileName
-   * }
+   * Legacy format.
    */
+
   if (
     item.verdict &&
     item.features
   ) {
-    const result: AnalysisResult = {
+    const result:
+      AnalysisResult = {
       id:
         String(
           item.id ||
@@ -3646,14 +4413,6 @@ export function getScanHistory():
 
 /* ============================================================
  * SAVE HISTORY — CURRENT APP API
- *
- * App.tsx calls:
- *
- * saveScanToHistory(
- *   file.name,
- *   result,
- *   audioBuffer.duration
- * )
  * ============================================================ */
 
 export function saveScanToHistory(
@@ -3665,7 +4424,8 @@ export function saveScanToHistory(
     const history =
       getScanHistory();
 
-    const record: ScanRecord = {
+    const record:
+      ScanRecord = {
       id:
         `${Date.now()}-${Math.random()
           .toString(36)
@@ -3724,7 +4484,8 @@ export function saveScanRecord(
     const history =
       getScanHistory();
 
-    const normalized: ScanRecord = {
+    const normalized:
+      ScanRecord = {
       ...record,
 
       result: {
@@ -3801,11 +4562,15 @@ export function formatDiagnostics(
 
   return [
     `Frames: ${diagnostics.totalFrames}`,
+
     `Active frames: ${diagnostics.activeFrames}`,
+
     `Voiced frames: ${diagnostics.voicedFrames}`,
 
-    `Synthetic tests: ${diagnostics.syntheticTests}/9`,
+    `Synthetic tests: ${diagnostics.syntheticTests}/11`,
+
     `Natural tests: ${diagnostics.naturalTests}/8`,
+
     `Manipulation tests: ${diagnostics.manipulationTests}/4`,
 
     `AI evidence: ${(
@@ -3832,7 +4597,9 @@ export function formatDiagnostics(
       diagnostics.testAgreement *
       100
     ).toFixed(1)}%`,
-  ].join(" | ");
+  ].join(
+    " | "
+  );
 }
 
 
@@ -3842,6 +4609,7 @@ export function formatDiagnostics(
 
 const analysis = {
   analyzeAudio,
+
   analyzeAudioSync,
 
   extractAudioFeatures,
@@ -3849,9 +4617,11 @@ const analysis = {
   getScanHistory,
 
   saveScanToHistory,
+
   saveScanRecord,
 
   clearHistory,
+
   clearScanHistory,
 
   formatDiagnostics,
