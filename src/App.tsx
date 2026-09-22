@@ -2033,6 +2033,103 @@ function AppContent() {
 
   /*
    * ------------------------------------------------------------
+   * ANALYZED AUDIO WAVEFORM VISUALIZATION
+   * ------------------------------------------------------------
+   */
+
+  useEffect(() => {
+    if (!currentResult || waveformData.length === 0) {
+      return;
+    }
+
+    const render = () => {
+      const canvas = canvasWaveformRef.current;
+      if (!canvas) {
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return;
+      }
+
+      const width =
+        canvas.clientWidth || 400;
+      const height =
+        canvas.clientHeight ||
+        (canvas.classList.contains('h-16') ? 64 : 80);
+      const pixelRatio =
+        window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
+
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = 'rgba(5, 9, 20, 0.6)';
+      ctx.fillRect(0, 0, width, height);
+
+      const isAi = currentResult.verdict === 'AI-Generated';
+
+      // Center baseline
+      ctx.strokeStyle = isAi
+        ? 'rgba(168, 85, 247, 0.2)'
+        : 'rgba(0, 212, 255, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+
+      // Waveform gradient
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      if (isAi) {
+        gradient.addColorStop(0, '#a855f7');
+        gradient.addColorStop(1, '#c084fc');
+      } else {
+        gradient.addColorStop(0, '#00d4ff');
+        gradient.addColorStop(1, '#00ff88');
+      }
+
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = isAi ? '#a855f7' : '#00d4ff';
+      ctx.shadowBlur = 4;
+
+      const maxVal = Math.max(...waveformData.map(Math.abs), 0.01);
+
+      // Top half
+      ctx.beginPath();
+      waveformData.forEach((val, i) => {
+        const x = (i / (waveformData.length - 1 || 1)) * width;
+        const y = height / 2 - (val / maxVal) * (height / 2) * 0.82;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Mirrored bottom half
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      waveformData.forEach((val, i) => {
+        const x = (i / (waveformData.length - 1 || 1)) * width;
+        const y = height / 2 + (val / maxVal) * (height / 2) * 0.82;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    };
+
+    const animId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animId);
+  }, [waveformData, currentResult, activeTab]);
+
+  /*
+   * ------------------------------------------------------------
    * START RECORDING
    * ------------------------------------------------------------
    */
