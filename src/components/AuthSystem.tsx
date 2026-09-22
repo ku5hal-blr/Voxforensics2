@@ -889,12 +889,26 @@ export default function AuthSystem() {
     recaptchaVerifierRef.current =
       null;
 
-    /*
-     * Hide the container after clearing
-     * the Firebase reCAPTCHA instance.
-     */
+    const container =
+      document.getElementById(
+        'voxforensics-recaptcha-container'
+      );
+
+    if (container) {
+      container.innerHTML = '';
+    }
+
     setShowRecaptcha(false);
   };
+
+  /*
+   * Clean up any active reCAPTCHA widget on unmount.
+   */
+  useEffect(() => {
+    return () => {
+      clearRecaptcha();
+    };
+  }, []);
 
   /* ----------------------------------------------------------
    * CREATE RECAPTCHA
@@ -903,13 +917,24 @@ export default function AuthSystem() {
   const createRecaptcha =
     async () => {
       /*
-       * Reuse the existing verifier if one
-       * is already active.
+       * Clean up any existing verifier instance
+       * before creating a fresh one to prevent
+       * duplicate widget or expired token errors.
        */
       if (
         recaptchaVerifierRef.current
       ) {
-        return recaptchaVerifierRef.current;
+        try {
+          recaptchaVerifierRef.current.clear();
+        } catch (error) {
+          console.warn(
+            'Could not clear previous reCAPTCHA:',
+            error
+          );
+        }
+
+        recaptchaVerifierRef.current =
+          null;
       }
 
       const container =
@@ -924,8 +949,8 @@ export default function AuthSystem() {
       }
 
       /*
-       * Wait for React to render the OTP screen
-       * before asking Firebase to render reCAPTCHA.
+       * Wait for DOM paint before initializing
+       * the Firebase reCAPTCHA instance.
        */
       await new Promise<void>(
         (resolve) => {
@@ -946,11 +971,11 @@ export default function AuthSystem() {
           auth,
           'voxforensics-recaptcha-container',
           {
-            size: 'normal',
+            size: 'invisible',
 
             callback: () => {
               console.log(
-                'reCAPTCHA completed.'
+                'Invisible reCAPTCHA completed.'
               );
             },
 
@@ -959,15 +984,20 @@ export default function AuthSystem() {
                 'reCAPTCHA expired.'
               );
 
+              clearRecaptcha();
+
               setError(
-                'reCAPTCHA expired. Please complete it again.'
+                'reCAPTCHA verification expired. Please request a new code.'
               );
             },
 
-            'error-callback': () => {
-              console.log(
-                'reCAPTCHA error.'
+            'error-callback': (err: any) => {
+              console.error(
+                'reCAPTCHA error:',
+                err
               );
+
+              clearRecaptcha();
 
               setError(
                 'reCAPTCHA verification failed. Please try again.'
@@ -982,7 +1012,7 @@ export default function AuthSystem() {
       await verifier.render();
 
       console.log(
-        'reCAPTCHA rendered successfully.'
+        'Invisible reCAPTCHA rendered successfully.'
       );
 
       return verifier;
@@ -3113,23 +3143,8 @@ export default function AuthSystem() {
       <div
         id="voxforensics-recaptcha-container"
         style={{
-          marginTop:
-            '18px',
-
-          display:
-            step === 'otp' &&
-            showRecaptcha
-              ? 'flex'
-              : 'none',
-
-          justifyContent:
-            'center',
-
-          minHeight:
-            step === 'otp' &&
-            showRecaptcha
-              ? '78px'
-              : '0px',
+          display: 'flex',
+          justifyContent: 'center',
         }}
       />
     </div>

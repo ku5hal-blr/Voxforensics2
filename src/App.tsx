@@ -1393,10 +1393,10 @@ function AppContent() {
                 ),
 
               features: {
-                rmsEnergy,
-                pitchVariation,
-                spectralCentroid,
-                zeroCrossingRate,
+                rmsEnergy: mlResult.features.rmsEnergy,
+                pitchVariation: mlResult.features.pitchMean,
+                spectralCentroid: mlResult.features.spectralCentroid,
+                zeroCrossingRate: mlResult.features.zeroCrossingRate,
               },
 
               explanation:
@@ -3524,6 +3524,18 @@ function AppContent() {
 
                       })()}
 
+                      <div className="flex items-center justify-between">
+
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                          Acoustic Features
+                        </p>
+
+                        <span className="px-2 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
+                          45 FEATURES ANALYZED
+                        </span>
+
+                      </div>
+
                       <div className="grid grid-cols-2 gap-2">
 
                         <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
@@ -3548,8 +3560,9 @@ function AppContent() {
 
                           <p className="text-xs font-mono text-[#00d4ff]">
                             {currentResult.features.pitchVariation.toFixed(
-                              3
-                            )}
+                              1
+                            )}{' '}
+                            Hz
                           </p>
 
                         </div>
@@ -4026,9 +4039,17 @@ function AppContent() {
 
                   <div>
 
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3">
-                      Acoustic Features
-                    </p>
+                    <div className="flex items-center justify-between mb-3">
+
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                        Acoustic Features
+                      </p>
+
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
+                        45 FEATURES ANALYZED
+                      </span>
+
+                    </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
 
@@ -4054,8 +4075,9 @@ function AppContent() {
 
                         <p className="text-sm font-mono text-[#00d4ff] mt-1">
                           {currentResult.features.pitchVariation.toFixed(
-                            3
-                          )}
+                            1
+                          )}{' '}
+                          Hz
                         </p>
 
                       </div>
