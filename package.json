@@ -17,6 +17,7 @@
     "@types/three": "^0.185.4",
     "canvas-confetti": "^1.9.3",
     "date-fns": "^2.30.0",
+    "firebase": "^12.19.0",
     "framer-motion": "^11.16.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.294.0",
