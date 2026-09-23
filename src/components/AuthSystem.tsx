@@ -51,6 +51,7 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
+  authLoading: boolean;
 
   login: (
     email: string,
@@ -226,8 +227,7 @@ export function AuthProvider({
       }
 
       const enrolledFactors =
-        firebaseUser.multiFactor
-          ?.enrolledFactors ?? [];
+        multiFactor(firebaseUser).enrolledFactors;
 
       const hasMFA =
         mfaVerified ||
@@ -370,30 +370,15 @@ export function AuthProvider({
             }
 
             const enrolledFactors =
-              firebaseUser.multiFactor
-                ?.enrolledFactors ?? [];
+              multiFactor(firebaseUser).enrolledFactors;
 
-            /*
-             * After successful MFA resolution,
-             * allow the user through even if Firebase's
-             * auth state update arrives before the factor
-             * list is immediately reflected.
-             */
-            if (
-              mfaJustCompletedRef.current
-            ) {
+            if (mfaJustCompletedRef.current) {
               setCurrentUser(profile);
               setAuthLoading(false);
               return;
             }
 
-            /*
-             * Existing regular accounts are required to
-             * have MFA enrolled.
-             */
-            if (
-              enrolledFactors.length === 0
-            ) {
+            if (profile.twoFactorEnabled && enrolledFactors.length === 0) {
               setCurrentUser(null);
               setAuthLoading(false);
               return;
@@ -639,6 +624,7 @@ export function AuthProvider({
 
   const value: AuthContextType = {
     user: currentUser,
+    authLoading,
     login,
     completeLogin,
     register,

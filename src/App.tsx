@@ -93,14 +93,22 @@ type TabType =
   | 'about';
 
 function AppContent() {
-  const { user, logout } =
+  const { user, logout, authLoading } =
     useAuth();
 
   const { hasConsented } =
     useConsent();
 
-  const [activeTab, setActiveTab] =
-    useState<TabType>('home');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const saved = localStorage.getItem('vox_active_tab') as TabType;
+    return ['home', 'scanner', 'refer', 'history', 'about'].includes(saved)
+      ? saved
+      : 'home';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vox_active_tab', activeTab);
+  }, [activeTab]);
 
   const [isRecording, setIsRecording] =
     useState(false);
@@ -488,6 +496,19 @@ function AppContent() {
     openReferralCard,
     user,
   ]);
+
+  /*
+   * ------------------------------------------------------------
+   * RESTORE REFERRAL DASHBOARD ON MOUNT / REFRESH
+   * ------------------------------------------------------------
+   */
+
+  useEffect(() => {
+    if (activeTab === 'refer' && user) {
+      setShowDashboard(true);
+      setOpenReferralCard(true);
+    }
+  }, [activeTab, user]);
 
   /*
    * ------------------------------------------------------------
@@ -2821,11 +2842,15 @@ function AppContent() {
             false
           );
         }}
-        onBack={() =>
+        onBack={() => {
           setShowDashboard(
             false
-          )
-        }
+          );
+
+          if (activeTab === 'refer') {
+            setActiveTab('home');
+          }
+        }}
       />
     );
   }
@@ -2902,6 +2927,10 @@ function AppContent() {
                       ) {
                         return;
                       }
+
+                      setActiveTab(
+                        'refer'
+                      );
 
                       setOpenReferralCard(
                         true
@@ -2989,7 +3018,9 @@ function AppContent() {
 
           <div className="flex items-center gap-3">
 
-            {user ? (
+            {authLoading ? (
+              <div className="h-9 w-28 rounded-lg bg-white/5 animate-pulse" />
+            ) : user ? (
               <>
 
                 <button
