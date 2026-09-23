@@ -337,6 +337,32 @@ export function AuthProvider({
               return;
             }
 
+            const profile =
+              await loadUserProfile(
+                firebaseUser,
+                mfaJustCompletedRef.current
+              );
+
+            if (!profile) {
+              setCurrentUser(null);
+              setAuthLoading(false);
+              return;
+            }
+
+            /*
+             * Admin users authenticated via Firebase are
+             * recognized directly using their Firestore profile.
+             */
+            if (profile.role === 'admin') {
+              setCurrentUser(profile);
+              setAuthLoading(false);
+              return;
+            }
+
+            /*
+             * Regular users preserve existing email verification
+             * and MFA requirements.
+             */
             if (!firebaseUser.emailVerified) {
               setCurrentUser(null);
               setAuthLoading(false);
@@ -356,19 +382,13 @@ export function AuthProvider({
             if (
               mfaJustCompletedRef.current
             ) {
-              const profile =
-                await loadUserProfile(
-                  firebaseUser,
-                  true
-                );
-
               setCurrentUser(profile);
               setAuthLoading(false);
               return;
             }
 
             /*
-             * Existing accounts are required to
+             * Existing regular accounts are required to
              * have MFA enrolled.
              */
             if (
@@ -378,12 +398,6 @@ export function AuthProvider({
               setAuthLoading(false);
               return;
             }
-
-            const profile =
-              await loadUserProfile(
-                firebaseUser,
-                false
-              );
 
             setCurrentUser(profile);
           } catch (error) {
@@ -411,10 +425,6 @@ export function AuthProvider({
     mfaVerified = false
   ): Promise<boolean> {
     try {
-      if (!firebaseUser.emailVerified) {
-        return false;
-      }
-
       if (mfaVerified) {
         mfaJustCompletedRef.current =
           true;
@@ -427,6 +437,13 @@ export function AuthProvider({
         );
 
       if (!profile) {
+        return false;
+      }
+
+      if (
+        profile.role !== 'admin' &&
+        !firebaseUser.emailVerified
+      ) {
         return false;
       }
 

@@ -8,6 +8,7 @@ import {
 import {
   AuthProvider,
   useAuth,
+  type User,
 } from './components/AuthSystem';
 
 import AuthSystem from './components/AuthSystem';
@@ -362,9 +363,12 @@ function AppContent() {
 
   /*
    * ------------------------------------------------------------
-   * CLOSE AUTH MODAL AFTER SUCCESSFUL LOGIN / REGISTRATION
+   * CLOSE AUTH MODAL & DIRECT ADMIN DIRECTLY TO ADMIN DASHBOARD
    * ------------------------------------------------------------
    */
+
+  const previousUserRef =
+    useRef<User | null>(null);
 
   useEffect(() => {
     if (
@@ -373,6 +377,15 @@ function AppContent() {
     ) {
       setShowAuthModal(false);
     }
+
+    if (
+      !previousUserRef.current &&
+      user?.role === 'admin'
+    ) {
+      setShowDashboard(true);
+    }
+
+    previousUserRef.current = user;
   }, [
     user,
     showAuthModal,
@@ -2701,6 +2714,7 @@ function AppContent() {
 
   if (
     user &&
+    user.role !== 'admin' &&
     !hasConsented
   ) {
     return null;

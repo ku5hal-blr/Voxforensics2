@@ -72,6 +72,14 @@ export function ConsentProvider({
       return;
     }
 
+    /*
+     * Admin users bypass the consent modal.
+     */
+    if (user.role === 'admin') {
+      setHasConsented(true);
+      return;
+    }
+
     const consentKey =
       `voxforensics_consent_${user.id}`;
 
@@ -92,7 +100,7 @@ export function ConsentProvider({
     setHasConsented(
       storedConsent === 'true'
     );
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   const giveConsent = () => {
     if (!user) {
@@ -133,7 +141,7 @@ export function ConsentProvider({
     >
       {children}
 
-      {user && !hasConsented && (
+      {user && user.role !== 'admin' && !hasConsented && (
         <ConsentModal
           onAccept={giveConsent}
         />
