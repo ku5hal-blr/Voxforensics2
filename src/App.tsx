@@ -20,12 +20,15 @@ import {
 
 import {
   analyzeAudio,
-  getScanHistory,
-  saveScanToHistory,
-  clearHistory,
   AnalysisResult,
   ScanRecord,
 } from './utils/analysis';
+
+import {
+  getUserScanHistory,
+  saveUserScanToHistory,
+  clearUserScanHistory,
+} from './services/history';
 
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
@@ -139,9 +142,43 @@ function AppContent() {
     useState<number[][]>([]);
 
   const [history, setHistory] =
-    useState<ScanRecord[]>(
-      getScanHistory()
-    );
+    useState<ScanRecord[]>([]);
+
+  /*
+   * ------------------------------------------------------------
+   * FIRESTORE SCAN HISTORY FOR AUTHENTICATED USER
+   * ------------------------------------------------------------
+   */
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!user?.id) {
+      setHistory([]);
+      return;
+    }
+
+    getUserScanHistory(user.id)
+      .then((records) => {
+        if (!isCancelled) {
+          setHistory(records);
+        }
+      })
+      .catch((error) => {
+        console.warn(
+          'Failed to load Firestore scan history:',
+          error
+        );
+
+        if (!isCancelled) {
+          setHistory([]);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
 
   const [recordingTime, setRecordingTime] =
     useState(0);
@@ -1487,16 +1524,30 @@ function AppContent() {
            * ======================================================
            */
 
-          saveScanToHistory(
-            file.name,
-            result,
-            audioDuration ||
-              0
-          );
+          if (user?.id) {
+            try {
+              await saveUserScanToHistory(
+                user.id,
+                file.name,
+                result,
+                audioDuration || 0
+              );
 
-          setHistory(
-            getScanHistory()
-          );
+              const updatedHistory =
+                await getUserScanHistory(
+                  user.id
+                );
+
+              setHistory(
+                updatedHistory
+              );
+            } catch (saveError) {
+              console.warn(
+                'Failed to save scan to Firestore history:',
+                saveError
+              );
+            }
+          }
 
           /*
            * Close AudioContext if browser decoding succeeded.
@@ -1558,17 +1609,32 @@ function AppContent() {
               result
             );
 
-            saveScanToHistory(
-              file.name,
-              result,
-              3 +
-                Math.random() *
-                  7
-            );
+            if (user?.id) {
+              try {
+                await saveUserScanToHistory(
+                  user.id,
+                  file.name,
+                  result,
+                  3 +
+                    Math.random() *
+                      7
+                );
 
-            setHistory(
-              getScanHistory()
-            );
+                const updatedHistory =
+                  await getUserScanHistory(
+                    user.id
+                  );
+
+                setHistory(
+                  updatedHistory
+                );
+              } catch (saveError) {
+                console.warn(
+                  'Failed to save demo scan to Firestore history:',
+                  saveError
+                );
+              }
+            }
 
           } else {
             /*
@@ -2051,7 +2117,7 @@ function AppContent() {
    */
 
   useEffect(() => {
-    if (!currentResult || waveformData.length === 0) {
+    if (!currentResult || isAnalyzing || waveformData.length === 0) {
       return;
     }
 
@@ -2139,7 +2205,7 @@ function AppContent() {
 
     const animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [waveformData, currentResult, activeTab]);
+  }, [waveformData, currentResult, isAnalyzing, activeTab]);
 
   /*
    * ------------------------------------------------------------
@@ -4336,8 +4402,19 @@ function AppContent() {
                 0 && (
 
                 <button
-                  onClick={() => {
-                    clearHistory();
+                  onClick={async () => {
+                    if (user?.id) {
+                      try {
+                        await clearUserScanHistory(
+                          user.id
+                        );
+                      } catch (clearError) {
+                        console.warn(
+                          'Failed to clear Firestore scan history:',
+                          clearError
+                        );
+                      }
+                    }
 
                     setHistory(
                       []

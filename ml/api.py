@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import shutil
 import tempfile
+import subprocess
 import joblib
 import pandas as pd
 
@@ -88,6 +89,7 @@ async def predict_audio(
     )[1]
 
     temp_path = None
+    converted_path = None
 
     try:
 
@@ -110,10 +112,59 @@ async def predict_audio(
         print()
         print("Received:", file.filename)
 
+        # Convert WebM to temporary WAV via FFmpeg if necessary
+        audio_path = temp_path
+        is_webm = (
+            suffix.lower() == ".webm"
+            or file.filename.lower().endswith(".webm")
+            or (file.content_type and "webm" in file.content_type.lower())
+        )
+
+        if is_webm:
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".wav"
+            ) as conv_file:
+                converted_path = conv_file.name
+
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                temp_path,
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                converted_path
+            ]
+
+            try:
+                conversion_result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+            except Exception as sub_err:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"FFmpeg execution failed: {str(sub_err)}"
+                )
+
+            if conversion_result.returncode != 0:
+                print("FFmpeg conversion failed:", conversion_result.stderr)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Audio conversion failed: {conversion_result.stderr.strip()[-300:]}"
+                )
+
+            audio_path = converted_path
+
         # Extract the same 45 features used
         # during model training.
         features = extract_features(
-            temp_path
+            audio_path
         )
 
         X = pd.DataFrame(
@@ -179,6 +230,9 @@ async def predict_audio(
             }
         }
 
+    except HTTPException:
+        raise
+
     except Exception as error:
 
         print()
@@ -191,10 +245,10 @@ async def predict_audio(
 
     finally:
 
-        if temp_path and os.path.exists(
-            temp_path
-        ):
+        for path in (temp_path, converted_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception as cleanup_err:
+                    print("Warning: Failed to remove temporary file:", path, cleanup_err)
 
-            os.remove(
-                temp_path
-            )
