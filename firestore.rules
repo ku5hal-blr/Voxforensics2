@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // ============================================================
+    // USERS COLLECTION & SUBCOLLECTIONS
+    // ============================================================
+    match /users/{userId} {
+      // Users can read/write their own profile; admins can read all
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+
+      // Scans subcollection: users/{userId}/scans/{scanId}
+      // Strictly isolated: users can only access their own scans
+      match /scans/{scanId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && (
+          !('userId' in request.resource.data) || request.resource.data.userId == userId
+        );
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // ============================================================
+    // ROOT-LEVEL SCANS COLLECTION (IF QUERIED)
+    // ============================================================
+    match /scans/{scanId} {
+      // Must be authenticated and must match the document's userId field
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

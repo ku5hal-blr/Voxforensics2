@@ -1,5 +1,3 @@
-import { analyzeAudio, AcousticFeatures } from '../utils/analysis';
-
 interface TestResult {
   name: string;
   passed: boolean;
@@ -8,245 +6,429 @@ interface TestResult {
   confidence?: number;
 }
 
+const API_URL = 'http://127.0.0.1:8000';
+
+interface HealthResponse {
+  status: string;
+  model_loaded: boolean;
+}
+
+interface PredictionResponse {
+  success: boolean;
+  filename: string;
+  verdict: string;
+  real_probability: number;
+  fake_probability: number;
+  features?: {
+    rmsEnergy?: number;
+    pitchMean?: number;
+    spectralCentroid?: number;
+    zeroCrossingRate?: number;
+  };
+}
+
+async function checkHealth(): Promise<HealthResponse> {
+  const response = await fetch(`${API_URL}/health`);
+
+  if (!response.ok) {
+    throw new Error(`Health check failed: HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function predictTestAudio(
+  path: string,
+  filename: string
+): Promise<PredictionResponse> {
+  const response = await fetch(path);
+
+  if (!response.ok) {
+    throw new Error(`Could not load test audio: HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  const file = new File([blob], filename, {
+    type: 'audio/wav',
+  });
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const predictionResponse = await fetch(`${API_URL}/predict`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!predictionResponse.ok) {
+    const errorText = await predictionResponse.text();
+    throw new Error(
+      `Prediction API failed: HTTP ${predictionResponse.status} ${errorText}`
+    );
+  }
+
+  return predictionResponse.json();
+}
+
+function getConfidence(result: PredictionResponse): number {
+  return Math.max(
+    result.real_probability,
+    result.fake_probability
+  );
+}
+
+function getActualLabel(result: PredictionResponse): string {
+  return result.verdict;
+}
+
 export async function runComprehensiveTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];
 
-  // Test 1: Clear AI Voice (low pitch variability, high formant stability)
-  console.log('🧪 Test 1: Clear AI Voice Detection');
-  const aiFeatures1: AcousticFeatures = {
-    pitchVariability: 0.08,
-    formantStability: 0.94,
-    spectralFlatness: 0.11,
-    harmonicRatio: 0.62,
-    temporalModulation: 0.30,
-    zeroCrossingRate: 0.065,
-    spectralCentroid: 2900,
-    spectralRolloff: 5200,
-    mfccEnergy: -18,
-    chromaFeatures: 0.65
-  };
-  const result1 = await analyzeAudio(null, 'test_ai_1.wav', undefined, aiFeatures1);
-  results.push({
-    name: 'Test 1: Clear AI Voice (synthetic features)',
-    passed: result1.isDeepfake === true,
-    expected: 'Deepfake (AI Voice)',
-    actual: result1.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result1.confidence
-  });
+  console.log('🧪 Starting VoxForensics ML pipeline tests...');
 
-  // Test 2: Clear Real Voice (high pitch variability, natural modulation)
-  console.log('🧪 Test 2: Clear Real Voice Detection');
-  const realFeatures1: AcousticFeatures = {
-    pitchVariability: 0.38,
-    formantStability: 0.62,
-    spectralFlatness: 0.032,
-    harmonicRatio: 0.85,
-    temporalModulation: 0.72,
-    zeroCrossingRate: 0.028,
-    spectralCentroid: 2400,
-    spectralRolloff: 4800,
-    mfccEnergy: -22,
-    chromaFeatures: 0.78
-  };
-  const result2 = await analyzeAudio(null, 'test_real_1.wav', undefined, realFeatures1);
-  results.push({
-    name: 'Test 2: Clear Real Voice (natural features)',
-    passed: result2.isDeepfake === false,
-    expected: 'Real Voice',
-    actual: result2.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result2.confidence
-  });
+  // ---------------------------------------------------------
+  // TEST 1 — API health
+  // ---------------------------------------------------------
+  try {
+    const health = await checkHealth();
 
-  // Test 3: AI Voice with Speaker Playback (slightly degraded but still detectable)
-  console.log('🧪 Test 3: AI Voice via Speaker (degraded signal)');
-  const aiFeatures2: AcousticFeatures = {
-    pitchVariability: 0.14,
-    formantStability: 0.88,
-    spectralFlatness: 0.085,
-    harmonicRatio: 0.68,
-    temporalModulation: 0.38,
-    zeroCrossingRate: 0.058,
-    spectralCentroid: 2750,
-    spectralRolloff: 5100,
-    mfccEnergy: -19,
-    chromaFeatures: 0.68
-  };
-  const result3 = await analyzeAudio(null, 'test_ai_speaker.wav', undefined, aiFeatures2);
-  results.push({
-    name: 'Test 3: AI Voice via Speaker Playback',
-    passed: result3.isDeepfake === true,
-    expected: 'Deepfake (AI Voice)',
-    actual: result3.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result3.confidence
-  });
+    const passed =
+      health.status === 'healthy' &&
+      health.model_loaded === true;
 
-  // Test 4: Mixed Audio (Real + AI - should detect AI presence)
-  console.log('🧪 Test 4: Mixed Audio (Real + AI Background)');
-  const mixedFeatures: AcousticFeatures = {
-    pitchVariability: 0.22, // Lower than pure real due to AI interference
-    formantStability: 0.78, // Higher than pure real
-    spectralFlatness: 0.065, // Higher than pure real
-    harmonicRatio: 0.73, // Lower than pure real
-    temporalModulation: 0.48, // Lower than pure real
-    zeroCrossingRate: 0.048, // Higher than pure real
-    spectralCentroid: 2600,
-    spectralRolloff: 4950,
-    mfccEnergy: -20,
-    chromaFeatures: 0.72
-  };
-  const result4 = await analyzeAudio(null, 'test_mixed.wav', undefined, mixedFeatures);
-  results.push({
-    name: 'Test 4: Mixed Audio (Real + AI Background)',
-    passed: result4.isDeepfake === true, // Should detect AI presence
-    expected: 'Deepfake (AI Detected in Mix)',
-    actual: result4.isDeepfake ? 'Deepfake (AI Detected)' : 'Real Voice',
-    confidence: result4.confidence
-  });
+    results.push({
+      name: 'Test 1: ML API Health Check',
+      passed,
+      expected: 'Healthy API with model loaded',
+      actual: passed
+        ? 'Healthy API with model loaded'
+        : `status=${health.status}, model_loaded=${health.model_loaded}`,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 1: ML API Health Check',
+      passed: false,
+      expected: 'Healthy API with model loaded',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown API error',
+    });
+  }
 
-  // Test 5: Borderline Real Voice (natural but with some noise)
-  console.log('🧪 Test 5: Borderline Real Voice');
-  const realFeatures2: AcousticFeatures = {
-    pitchVariability: 0.28,
-    formantStability: 0.70,
-    spectralFlatness: 0.048,
-    harmonicRatio: 0.79,
-    temporalModulation: 0.58,
-    zeroCrossingRate: 0.038,
-    spectralCentroid: 2350,
-    spectralRolloff: 4750,
-    mfccEnergy: -21,
-    chromaFeatures: 0.76
-  };
-  const result5 = await analyzeAudio(null, 'test_real_borderline.wav', undefined, realFeatures2);
-  results.push({
-    name: 'Test 5: Borderline Real Voice (noisy environment)',
-    passed: result5.isDeepfake === false,
-    expected: 'Real Voice',
-    actual: result5.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result5.confidence
-  });
+  // ---------------------------------------------------------
+  // TEST 2 — Real voice prediction
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_real.wav',
+      'test_real.wav'
+    );
 
-  // Test 6: High-Quality AI Voice (very synthetic)
-  console.log('🧪 Test 6: High-Quality AI Voice');
-  const aiFeatures3: AcousticFeatures = {
-    pitchVariability: 0.06,
-    formantStability: 0.96,
-    spectralFlatness: 0.13,
-    harmonicRatio: 0.58,
-    temporalModulation: 0.25,
-    zeroCrossingRate: 0.072,
-    spectralCentroid: 3050,
-    spectralRolloff: 5350,
-    mfccEnergy: -17,
-    chromaFeatures: 0.62
-  };
-  const result6 = await analyzeAudio(null, 'test_ai_high_quality.wav', undefined, aiFeatures3);
-  results.push({
-    name: 'Test 6: High-Quality AI Voice (very synthetic)',
-    passed: result6.isDeepfake === true,
-    expected: 'Deepfake (AI Voice)',
-    actual: result6.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result6.confidence
-  });
+    const passed =
+      result.success === true &&
+      result.verdict === 'Real Voice';
 
-  // Test 7: Real Voice with Background Music
-  console.log('🧪 Test 7: Real Voice with Background Music');
-  const realFeatures3: AcousticFeatures = {
-    pitchVariability: 0.35,
-    formantStability: 0.65,
-    spectralFlatness: 0.042,
-    harmonicRatio: 0.82,
-    temporalModulation: 0.68,
-    zeroCrossingRate: 0.032,
-    spectralCentroid: 2500,
-    spectralRolloff: 4900,
-    mfccEnergy: -20,
-    chromaFeatures: 0.80
-  };
-  const result7 = await analyzeAudio(null, 'test_real_with_music.wav', undefined, realFeatures3);
-  results.push({
-    name: 'Test 7: Real Voice with Background Music',
-    passed: result7.isDeepfake === false,
-    expected: 'Real Voice',
-    actual: result7.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result7.confidence
-  });
+    results.push({
+      name: 'Test 2: Real Voice ML Prediction',
+      passed,
+      expected: 'Real Voice',
+      actual: getActualLabel(result),
+      confidence: getConfidence(result),
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 2: Real Voice ML Prediction',
+      passed: false,
+      expected: 'Real Voice',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown prediction error',
+    });
+  }
 
-  // Test 8: AI Voice with Heavy Processing/Effects
-  console.log('🧪 Test 8: AI Voice with Audio Effects');
-  const aiFeatures4: AcousticFeatures = {
-    pitchVariability: 0.11,
-    formantStability: 0.90,
-    spectralFlatness: 0.095,
-    harmonicRatio: 0.65,
-    temporalModulation: 0.33,
-    zeroCrossingRate: 0.062,
-    spectralCentroid: 2850,
-    spectralRolloff: 5250,
-    mfccEnergy: -18,
-    chromaFeatures: 0.66
-  };
-  const result8 = await analyzeAudio(null, 'test_ai_processed.wav', undefined, aiFeatures4);
-  results.push({
-    name: 'Test 8: AI Voice with Audio Effects/Processing',
-    passed: result8.isDeepfake === true,
-    expected: 'Deepfake (AI Voice)',
-    actual: result8.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result8.confidence
-  });
+  // ---------------------------------------------------------
+  // TEST 3 — Fake/AI voice prediction
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_fake.wav',
+      'test_fake.wav'
+    );
 
-  // Test 9: Very Quiet Real Voice (low energy but natural)
-  console.log('🧪 Test 9: Quiet Real Voice');
-  const realFeatures4: AcousticFeatures = {
-    pitchVariability: 0.32,
-    formantStability: 0.68,
-    spectralFlatness: 0.038,
-    harmonicRatio: 0.80,
-    temporalModulation: 0.62,
-    zeroCrossingRate: 0.030,
-    spectralCentroid: 2300,
-    spectralRolloff: 4700,
-    mfccEnergy: -28, // Very quiet
-    chromaFeatures: 0.77
-  };
-  const result9 = await analyzeAudio(null, 'test_real_quiet.wav', undefined, realFeatures4);
-  results.push({
-    name: 'Test 9: Very Quiet Real Voice',
-    passed: result9.isDeepfake === false,
-    expected: 'Real Voice',
-    actual: result9.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result9.confidence
-  });
+    const passed =
+      result.success === true &&
+      (result.verdict === 'AI-Generated' ||
+        result.verdict === 'AI-Generated / Fake');
 
-  // Test 10: AI Voice Mimicking Real Speech Patterns
-  console.log('🧪 Test 10: Advanced AI Voice (mimicking natural patterns)');
-  const aiFeatures5: AcousticFeatures = {
-    pitchVariability: 0.17, // Trying to sound natural but still too consistent
-    formantStability: 0.84, // Still too stable
-    spectralFlatness: 0.072, // Still has vocoder artifacts
-    harmonicRatio: 0.71, // Still lower than real
-    temporalModulation: 0.44, // Still missing micro-pauses
-    zeroCrossingRate: 0.052, // Still elevated
-    spectralCentroid: 2680,
-    spectralRolloff: 5050,
-    mfccEnergy: -19,
-    chromaFeatures: 0.70
-  };
-  const result10 = await analyzeAudio(null, 'test_ai_advanced.wav', undefined, aiFeatures5);
-  results.push({
-    name: 'Test 10: Advanced AI Voice (mimicking natural speech)',
-    passed: result10.isDeepfake === true,
-    expected: 'Deepfake (AI Voice)',
-    actual: result10.isDeepfake ? 'Deepfake (AI Voice)' : 'Real Voice',
-    confidence: result10.confidence
-  });
+    results.push({
+      name: 'Test 3: AI Voice ML Prediction',
+      passed,
+      expected: 'AI-Generated',
+      actual: getActualLabel(result),
+      confidence: getConfidence(result),
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 3: AI Voice ML Prediction',
+      passed: false,
+      expected: 'AI-Generated',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown prediction error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 4 — Probability validation
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_real.wav',
+      'probability_test.wav'
+    );
+
+    const validProbabilities =
+      Number.isFinite(result.real_probability) &&
+      Number.isFinite(result.fake_probability) &&
+      result.real_probability >= 0 &&
+      result.real_probability <= 1 &&
+      result.fake_probability >= 0 &&
+      result.fake_probability <= 1;
+
+    results.push({
+      name: 'Test 4: Prediction Probability Validation',
+      passed: validProbabilities,
+      expected: 'Probabilities between 0 and 1',
+      actual: validProbabilities
+        ? 'Valid probability values'
+        : `real=${result.real_probability}, fake=${result.fake_probability}`,
+      confidence: validProbabilities
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 4: Prediction Probability Validation',
+      passed: false,
+      expected: 'Probabilities between 0 and 1',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown prediction error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 5 — Required response fields
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_real.wav',
+      'response_fields_test.wav'
+    );
+
+    const requiredFieldsPresent =
+      result.success === true &&
+      typeof result.filename === 'string' &&
+      typeof result.verdict === 'string' &&
+      typeof result.real_probability === 'number' &&
+      typeof result.fake_probability === 'number';
+
+    results.push({
+      name: 'Test 5: Prediction Response Structure',
+      passed: requiredFieldsPresent,
+      expected: 'All required prediction fields present',
+      actual: requiredFieldsPresent
+        ? 'All required fields present'
+        : 'One or more required fields are missing',
+      confidence: requiredFieldsPresent
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 5: Prediction Response Structure',
+      passed: false,
+      expected: 'All required prediction fields present',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown prediction error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 6 — Feature extraction response
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_real.wav',
+      'feature_test.wav'
+    );
+
+    const featuresPresent =
+      result.features !== undefined &&
+      typeof result.features === 'object';
+
+    results.push({
+      name: 'Test 6: ML Feature Extraction',
+      passed: featuresPresent,
+      expected: 'Feature data returned by ML pipeline',
+      actual: featuresPresent
+        ? 'Feature data returned successfully'
+        : 'Feature data missing from response',
+      confidence: featuresPresent
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 6: ML Feature Extraction',
+      passed: false,
+      expected: 'Feature data returned by ML pipeline',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown feature extraction error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 7 — Real audio can be processed repeatedly
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_real.wav',
+      'repeat_test.wav'
+    );
+
+    const passed = result.success === true;
+
+    results.push({
+      name: 'Test 7: Repeat Real Audio Processing',
+      passed,
+      expected: 'Successful repeated prediction',
+      actual: passed
+        ? 'Prediction completed successfully'
+        : result.verdict,
+      confidence: passed
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 7: Repeat Real Audio Processing',
+      passed: false,
+      expected: 'Successful repeated prediction',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown processing error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 8 — Fake audio can be processed repeatedly
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_fake.wav',
+      'repeat_fake_test.wav'
+    );
+
+    const passed = result.success === true;
+
+    results.push({
+      name: 'Test 8: Repeat AI Audio Processing',
+      passed,
+      expected: 'Successful repeated prediction',
+      actual: passed
+        ? 'Prediction completed successfully'
+        : result.verdict,
+      confidence: passed
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 8: Repeat AI Audio Processing',
+      passed: false,
+      expected: 'Successful repeated prediction',
+      actual: error instanceof Error
+        ? error.message
+        : 'Unknown processing error',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 9 — Frontend to API connectivity
+  // ---------------------------------------------------------
+  try {
+    const health = await checkHealth();
+
+    const passed = health.status === 'healthy';
+
+    results.push({
+      name: 'Test 9: Frontend → ML API Connection',
+      passed,
+      expected: 'Frontend can reach FastAPI backend',
+      actual: passed
+        ? 'Connection successful'
+        : `API returned status: ${health.status}`,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 9: Frontend → ML API Connection',
+      passed: false,
+      expected: 'Frontend can reach FastAPI backend',
+      actual: error instanceof Error
+        ? error.message
+        : 'Connection failed',
+    });
+  }
+
+  // ---------------------------------------------------------
+  // TEST 10 — Complete ML pipeline
+  // ---------------------------------------------------------
+  try {
+    const result = await predictTestAudio(
+      '/test_audio/test_fake.wav',
+      'end_to_end_test.wav'
+    );
+
+    const passed =
+      result.success === true &&
+      typeof result.verdict === 'string' &&
+      Number.isFinite(result.real_probability) &&
+      Number.isFinite(result.fake_probability);
+
+    results.push({
+      name: 'Test 10: Complete ML Detection Pipeline',
+      passed,
+      expected: 'Audio → API → Features → Random Forest → Result',
+      actual: passed
+        ? `Complete pipeline successful: ${result.verdict}`
+        : 'Complete pipeline failed',
+      confidence: passed
+        ? getConfidence(result)
+        : undefined,
+    });
+  } catch (error) {
+    results.push({
+      name: 'Test 10: Complete ML Detection Pipeline',
+      passed: false,
+      expected: 'Audio → API → Features → Random Forest → Result',
+      actual: error instanceof Error
+        ? error.message
+        : 'End-to-end pipeline failed',
+    });
+  }
+
+  console.log('🧪 VoxForensics ML pipeline tests completed.');
 
   return results;
 }
 
 export function printTestResults(results: TestResult[]) {
   console.log('\n' + '='.repeat(80));
-  console.log('🎯 VOXFORENSICS COMPREHENSIVE TEST RESULTS');
+  console.log('🎯 VOXFORENSICS ML PIPELINE TEST RESULTS');
   console.log('='.repeat(80) + '\n');
 
   let passed = 0;
@@ -254,27 +436,48 @@ export function printTestResults(results: TestResult[]) {
 
   results.forEach((result, index) => {
     const status = result.passed ? '✅ PASS' : '❌ FAIL';
-    const confidence = result.confidence ? ` (${(result.confidence * 100).toFixed(1)}% confidence)` : '';
-    
+
+    const confidence =
+      result.confidence !== undefined
+        ? ` (${(result.confidence * 100).toFixed(1)}% confidence)`
+        : '';
+
     console.log(`${status} Test ${index + 1}: ${result.name}`);
     console.log(`   Expected: ${result.expected}`);
     console.log(`   Actual:   ${result.actual}${confidence}`);
     console.log('');
 
-    if (result.passed) passed++;
-    else failed++;
+    if (result.passed) {
+      passed++;
+    } else {
+      failed++;
+    }
   });
 
   console.log('='.repeat(80));
-  console.log(`📊 SUMMARY: ${passed} passed, ${failed} failed out of ${results.length} tests`);
-  console.log(`🎯 Success Rate: ${((passed / results.length) * 100).toFixed(1)}%`);
+  console.log(
+    `📊 SUMMARY: ${passed} passed, ${failed} failed out of ${results.length} tests`
+  );
+
+  console.log(
+    `🎯 Pipeline Test Pass Rate: ${((passed / results.length) * 100).toFixed(1)}%`
+  );
+
   console.log('='.repeat(80) + '\n');
 
   if (failed === 0) {
-    console.log('🎉 ALL TESTS PASSED! AI voice detection is working correctly.\n');
+    console.log(
+      '🎉 ALL PIPELINE TESTS PASSED! The current ML pipeline is functioning correctly.\n'
+    );
   } else {
-    console.log(`⚠️  ${failed} test(s) failed. Review the detection algorithm.\n`);
+    console.log(
+      `⚠️ ${failed} pipeline test(s) failed. Review the corresponding component.\n`
+    );
   }
 
-  return { passed, failed, total: results.length };
+  return {
+    passed,
+    failed,
+    total: results.length,
+  };
 }

@@ -14,6 +14,10 @@ import type { AnalysisResult, ScanRecord } from '../utils/analysis';
 
 /* ============================================================
  * GET USER SCAN HISTORY
+ * ============================================================
+ * Retrieves scans strictly belonging to the specified user UID.
+ * Results are ordered newest first and cached in a user-isolated
+ * localStorage key: voxforensics_scan_history_<uid>
  * ============================================================ */
 
 export async function getUserScanHistory(
@@ -23,7 +27,8 @@ export async function getUserScanHistory(
     return [];
   }
 
-  const scansRef = collection(db, 'users', userId.trim(), 'scans');
+  const cleanUserId = userId.trim();
+  const scansRef = collection(db, 'users', cleanUserId, 'scans');
 
   try {
     let snapshot;
@@ -39,11 +44,18 @@ export async function getUserScanHistory(
       snapshot = await getDocs(scansRef);
     }
 
-    const records: ScanRecord[] = snapshot.docs.map((docSnap) => {
+    const records: ScanRecord[] = [];
+    for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
 
-      return {
+      // Safety check: ignore any record explicitly bound to a different userId
+      if (data.userId && data.userId !== cleanUserId) {
+        continue;
+      }
+
+      records.push({
         id: data.id || docSnap.id,
+        userId: data.userId || cleanUserId,
         filename: data.filename || 'Unknown audio',
         timestamp:
           typeof data.timestamp === 'string'
@@ -61,8 +73,8 @@ export async function getUserScanHistory(
             data.result?.isDeepfake ??
             data.result?.verdict === 'AI-Generated',
         } as AnalysisResult,
-      };
-    });
+      });
+    }
 
     // Ensure newest first order regardless of server timestamp resolution state
     records.sort(
@@ -70,15 +82,46 @@ export async function getUserScanHistory(
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
+    // Synchronize to user-scoped localStorage cache
+    try {
+      localStorage.setItem(
+        `voxforensics_scan_history_${cleanUserId}`,
+        JSON.stringify(records)
+      );
+    } catch {
+      // Ignore localStorage errors
+    }
+
     return records;
   } catch (error) {
     console.error('Failed to load user scan history from Firestore:', error);
+
+    // Fall back to user-scoped localStorage cache if offline or network error
+    try {
+      const cached = localStorage.getItem(
+        `voxforensics_scan_history_${cleanUserId}`
+      );
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (rec: ScanRecord) => !rec.userId || rec.userId === cleanUserId
+          );
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
     return [];
   }
 }
 
 /* ============================================================
  * SAVE USER SCAN TO HISTORY
+ * ============================================================
+ * Persists a new scan record into Firestore users/{userId}/scans/{scanId}.
+ * The record explicitly includes userId to enforce user ownership.
  * ============================================================ */
 
 export async function saveUserScanToHistory(
@@ -108,6 +151,7 @@ export async function saveUserScanToHistory(
 
   const recordData = {
     id: scanId,
+    userId: cleanUserId,
     filename: filename || 'Unknown audio',
     timestamp,
     duration: safeDuration,
@@ -121,10 +165,41 @@ export async function saveUserScanToHistory(
   };
 
   await setDoc(scanDocRef, recordData, { merge: true });
+
+  // Update user-scoped localStorage cache
+  try {
+    const cacheKey = `voxforensics_scan_history_${cleanUserId}`;
+    const existing: ScanRecord[] = JSON.parse(
+      localStorage.getItem(cacheKey) || '[]'
+    );
+    const updated = [
+      {
+        id: scanId,
+        userId: cleanUserId,
+        filename: filename || 'Unknown audio',
+        timestamp,
+        duration: safeDuration,
+        result: {
+          ...result,
+          isDeepfake:
+            result.isDeepfake ??
+            result.verdict === 'AI-Generated',
+        },
+      } as ScanRecord,
+      ...existing.filter((s) => s.id !== scanId),
+    ].slice(0, 100);
+
+    localStorage.setItem(cacheKey, JSON.stringify(updated));
+  } catch {
+    // Ignore localStorage write error
+  }
 }
 
 /* ============================================================
  * CLEAR USER SCAN HISTORY
+ * ============================================================
+ * Deletes all scan documents from users/{userId}/scans and clears
+ * the user-scoped localStorage cache.
  * ============================================================ */
 
 export async function clearUserScanHistory(
@@ -134,16 +209,21 @@ export async function clearUserScanHistory(
     return;
   }
 
-  const scansRef = collection(db, 'users', userId.trim(), 'scans');
+  const cleanUserId = userId.trim();
+  const scansRef = collection(db, 'users', cleanUserId, 'scans');
   const snapshot = await getDocs(scansRef);
 
-  if (snapshot.empty) {
-    return;
+  if (!snapshot.empty) {
+    const deletePromises = snapshot.docs.map((docSnap) =>
+      deleteDoc(docSnap.ref)
+    );
+    await Promise.all(deletePromises);
   }
 
-  const deletePromises = snapshot.docs.map((docSnap) =>
-    deleteDoc(docSnap.ref)
-  );
-
-  await Promise.all(deletePromises);
+  // Clear user-scoped localStorage cache
+  try {
+    localStorage.removeItem(`voxforensics_scan_history_${cleanUserId}`);
+  } catch {
+    // Ignore
+  }
 }

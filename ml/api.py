@@ -112,15 +112,26 @@ async def predict_audio(
         print()
         print("Received:", file.filename)
 
-        # Convert WebM to temporary WAV via FFmpeg if necessary
+        # Convert WebM or M4A to temporary WAV via FFmpeg if necessary
         audio_path = temp_path
         is_webm = (
             suffix.lower() == ".webm"
             or file.filename.lower().endswith(".webm")
             or (file.content_type and "webm" in file.content_type.lower())
         )
+        is_m4a = (
+            suffix.lower() == ".m4a"
+            or file.filename.lower().endswith(".m4a")
+            or (
+                file.content_type
+                and any(
+                    m in file.content_type.lower()
+                    for m in ["m4a", "x-m4a", "aac", "audio/mp4"]
+                )
+            )
+        )
 
-        if is_webm:
+        if is_webm or is_m4a:
             with tempfile.NamedTemporaryFile(
                 delete=False,
                 suffix=".wav"
@@ -211,12 +222,12 @@ async def predict_audio(
             "filename": file.filename,
             "verdict": verdict,
             "real_probability": round(
-                real_probability * 100,
-                2
+                real_probability,
+                4
             ),
             "fake_probability": round(
-                fake_probability * 100,
-                2
+                fake_probability,
+                4
             ),
             "features": {
                 "rmsEnergy": features["rms_mean"],

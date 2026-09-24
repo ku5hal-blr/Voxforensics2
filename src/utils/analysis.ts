@@ -109,6 +109,7 @@ export interface AnalysisResult {
 
 export interface ScanRecord {
   id: string;
+  userId?: string;
   filename: string;
   timestamp: string;
   duration: number;
@@ -4238,6 +4239,11 @@ function normalizeHistoryRecord(
             .slice(2, 9)}`
         ),
 
+      userId:
+        typeof item.userId === 'string'
+          ? item.userId
+          : undefined,
+
       filename:
         String(
           item.filename
@@ -4418,7 +4424,8 @@ export function getScanHistory():
 export function saveScanToHistory(
   filename: string,
   result: AnalysisResult,
-  duration: number
+  duration: number,
+  userId?: string
 ): void {
   try {
     const history =
@@ -4430,6 +4437,8 @@ export function saveScanToHistory(
         `${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 9)}`,
+
+      userId,
 
       filename,
 

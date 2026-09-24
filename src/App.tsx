@@ -92,6 +92,81 @@ type TabType =
   | 'history'
   | 'about';
 
+/*
+ * ============================================================
+ * VOXFORENSICS — AUDIO FILE VALIDATION
+ * ============================================================
+ * Accept only: .wav, .mp3, .m4a, .webm, .ogg, .flac
+ * Reject non-audio files (jpg, png, pdf, txt, docx, zip, etc.)
+ * ============================================================
+ */
+
+const SUPPORTED_AUDIO_EXTENSIONS = [
+  '.wav',
+  '.mp3',
+  '.m4a',
+  '.webm',
+  '.ogg',
+  '.flac',
+];
+
+const SUPPORTED_AUDIO_MIME_TYPES = [
+  'audio/wav',
+  'audio/x-wav',
+  'audio/wave',
+  'audio/vnd.wave',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/m4a',
+  'audio/aac',
+  'audio/webm',
+  'audio/ogg',
+  'audio/vorbis',
+  'audio/opus',
+  'audio/flac',
+  'audio/x-flac',
+  'application/ogg',
+  'application/x-ogg',
+  'application/flac',
+  'application/x-flac',
+];
+
+const UNSUPPORTED_AUDIO_ERROR =
+  'Unsupported file type. Please upload a supported audio file: WAV, MP3, M4A, WebM, OGG, or FLAC.';
+
+const isSupportedAudioFile = (file: File): boolean => {
+  if (!file || !file.name) {
+    return false;
+  }
+
+  const fileName = file.name.trim();
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    return false;
+  }
+
+  const extension = fileName.slice(lastDotIndex).toLowerCase();
+  if (!SUPPORTED_AUDIO_EXTENSIONS.includes(extension)) {
+    return false;
+  }
+
+  // Validate MIME type where practical (browsers may leave file.type empty or application/octet-stream on Windows)
+  const mimeType = file.type ? file.type.trim().toLowerCase() : '';
+  if (mimeType && mimeType !== 'application/octet-stream') {
+    const isAudioMime =
+      mimeType.startsWith('audio/') ||
+      SUPPORTED_AUDIO_MIME_TYPES.includes(mimeType);
+
+    if (!isAudioMime) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 function AppContent() {
   const { user, logout, authLoading } =
     useAuth();
@@ -567,41 +642,41 @@ function AppContent() {
           let value =
             Math.sin(
               t *
-                Math.PI *
-                8
+              Math.PI *
+              8
             ) *
-              0.5 +
+            0.5 +
             Math.sin(
               t *
-                Math.PI *
-                20
+              Math.PI *
+              20
             ) *
-              0.2 +
+            0.2 +
             Math.sin(
               t *
-                Math.PI *
-                50
+              Math.PI *
+              50
             ) *
-              0.1;
+            0.1;
 
           if (isFake) {
             value +=
               Math.sin(
                 t *
-                  Math.PI *
-                  100
+                Math.PI *
+                100
               ) *
               0.05;
 
             value *=
               0.95 +
               Math.random() *
-                0.1;
+              0.1;
           } else {
             value *=
               0.8 +
               Math.random() *
-                0.4;
+              0.4;
           }
 
           data.push(value);
@@ -640,14 +715,14 @@ function AppContent() {
                   (b - 15) **
                   2
                 ) /
-                  80
+                80
               ) *
               0.8;
 
             value +=
               Math.sin(
                 f * 0.1 +
-                  b * 0.2
+                b * 0.2
               ) *
               0.15;
 
@@ -672,7 +747,7 @@ function AppContent() {
                 Math.sin(
                   f * 0.05
                 ) *
-                  0.3;
+                0.3;
             }
 
             frame.push(
@@ -706,7 +781,7 @@ function AppContent() {
         result: AnalysisResult
       ) => {
         switch (
-          result.verdict
+        result.verdict
         ) {
           case 'AI-Generated':
             return {
@@ -790,6 +865,28 @@ function AppContent() {
             true
           );
 
+          return;
+        }
+
+        /*
+         * Validate file type before any audio analysis or decoding begins.
+         */
+        if (!isSupportedAudioFile(file)) {
+          stopAudioPlayback();
+          setAudioFile(null);
+          setRecordedAudioFile(null);
+          setCurrentResult(null);
+          setWaveformData([]);
+          setSpectrogramData([]);
+
+          if (homeFileInputRef.current) {
+            homeFileInputRef.current.value = '';
+          }
+          if (scannerFileInputRef.current) {
+            scannerFileInputRef.current.value = '';
+          }
+
+          alert(UNSUPPORTED_AUDIO_ERROR);
           return;
         }
 
@@ -882,7 +979,7 @@ function AppContent() {
                 1,
                 Math.floor(
                   channelData.length /
-                    samples
+                  samples
                 )
               );
 
@@ -903,7 +1000,7 @@ function AppContent() {
               ) {
                 const index =
                   i *
-                    blockSize +
+                  blockSize +
                   j;
 
                 if (
@@ -912,7 +1009,7 @@ function AppContent() {
                 ) {
                   sum += Math.abs(
                     channelData[
-                      index
+                    index
                     ]
                   );
                 }
@@ -920,7 +1017,7 @@ function AppContent() {
 
               waveform.push(
                 sum /
-                  blockSize
+                blockSize
               );
             }
 
@@ -948,7 +1045,7 @@ function AppContent() {
                 1,
                 Math.floor(
                   channelData.length /
-                    specFrames
+                  specFrames
                 )
               );
 
@@ -969,11 +1066,11 @@ function AppContent() {
               ) {
                 const start =
                   f *
-                    frameSize +
+                  frameSize +
                   Math.floor(
                     (b *
                       frameSize) /
-                      specBins
+                    specBins
                   );
 
                 const end =
@@ -982,7 +1079,7 @@ function AppContent() {
                     1,
                     Math.floor(
                       frameSize /
-                        specBins
+                      specBins
                     )
                   );
 
@@ -1001,10 +1098,10 @@ function AppContent() {
                 ) {
                   energy +=
                     channelData[
-                      s
+                    s
                     ] *
                     channelData[
-                      s
+                    s
                     ];
 
                   count++;
@@ -1012,11 +1109,11 @@ function AppContent() {
 
                 const rms =
                   count >
-                  0
+                    0
                     ? Math.sqrt(
-                        energy /
-                          count
-                      )
+                      energy /
+                      count
+                    )
                     : 0;
 
                 frame.push(
@@ -1037,7 +1134,7 @@ function AppContent() {
             );
 
           } catch (
-            browserAudioError
+          browserAudioError
           ) {
             /*
              * Browser decoding failed.
@@ -1284,10 +1381,10 @@ function AppContent() {
                 ) {
                   rmsSum +=
                     channelData[
-                      i
+                    i
                     ] *
                     channelData[
-                      i
+                    i
                     ];
 
                   rmsCount++;
@@ -1300,7 +1397,7 @@ function AppContent() {
                   rmsEnergy =
                     Math.sqrt(
                       rmsSum /
-                        rmsCount
+                      rmsCount
                     );
                 }
 
@@ -1321,18 +1418,18 @@ function AppContent() {
                   if (
                     (
                       channelData[
-                        i
+                      i
                       ] >= 0 &&
                       channelData[
-                        i - 1
+                      i - 1
                       ] < 0
                     ) ||
                     (
                       channelData[
-                        i
+                      i
                       ] < 0 &&
                       channelData[
-                        i - 1
+                      i - 1
                       ] >= 0
                     )
                   ) {
@@ -1383,7 +1480,7 @@ function AppContent() {
                     let k = 1;
                     k <
                     usableLength /
-                      2;
+                    2;
                     k++
                   ) {
                     const frequency =
@@ -1396,7 +1493,7 @@ function AppContent() {
                     const magnitude =
                       Math.abs(
                         channelData[
-                          k
+                        k
                         ]
                       );
 
@@ -1432,7 +1529,7 @@ function AppContent() {
                   zeroCrossingRate;
 
               } catch (
-                featureError
+              featureError
               ) {
                 console.warn(
                   'Frontend feature display calculation failed:',
@@ -1448,6 +1545,9 @@ function AppContent() {
              */
 
             result = {
+              id: 'scan_' + Date.now(),
+              isDeepfake: isFake,
+              timestamp: Date.now(),
               verdict:
                 isFake
                   ? 'AI-Generated'
@@ -1455,33 +1555,25 @@ function AppContent() {
 
               confidence:
                 Math.max(
-                  Number(
-                    mlResult.real_probability
-                  ),
-                  Number(
-                    mlResult.fake_probability
-                  )
-                ),
+                  Number(mlResult.real_probability),
+                  Number(mlResult.fake_probability)
+                ) * 100,
 
               features: {
                 rmsEnergy: mlResult.features.rmsEnergy,
                 pitchVariation: mlResult.features.pitchMean,
                 spectralCentroid: mlResult.features.spectralCentroid,
                 zeroCrossingRate: mlResult.features.zeroCrossingRate,
-              },
+              } as any,
 
               explanation:
                 isFake
-                  ? `The Random Forest machine learning model classified this recording as AI-generated with ${Number(
-                      mlResult.fake_probability
-                    ).toFixed(
-                      1
-                    )}% model probability.`
-                  : `The Random Forest machine learning model classified this recording as a real voice with ${Number(
-                      mlResult.real_probability
-                    ).toFixed(
-                      1
-                    )}% model probability.`,
+                  ? `The Random Forest machine learning model classified this recording as AI-generated with ${(
+                    Number(mlResult.fake_probability) * 100
+                  ).toFixed(1)}% model probability.`
+                  : `The Random Forest machine learning model classified this recording as a real voice with ${(
+                    Number(mlResult.real_probability) * 100
+                  ).toFixed(1)}% model probability.`,
             };
 
             /*
@@ -1637,8 +1729,8 @@ function AppContent() {
                   file.name,
                   result,
                   3 +
-                    Math.random() *
-                      7
+                  Math.random() *
+                  7
                 );
 
                 const updatedHistory =
@@ -1682,6 +1774,9 @@ function AppContent() {
 
             const errorResult:
               AnalysisResult = {
+              id: 'scan_err_' + Date.now(),
+              isDeepfake: false,
+              timestamp: Date.now(),
               verdict:
                 'Inconclusive',
 
@@ -1692,7 +1787,7 @@ function AppContent() {
                 pitchVariation: 0,
                 spectralCentroid: 0,
                 zeroCrossingRate: 0,
-              },
+              } as any,
 
               explanation:
                 'The machine learning analysis could not be completed. Please make sure the VoxForensics ML backend is running and the audio file is supported.',
@@ -1765,6 +1860,31 @@ function AppContent() {
       e.target.files?.[0];
 
     if (file) {
+      /*
+       * Frontend file-type validation.
+       * Accept only: .wav, .mp3, .m4a, .webm, .ogg, .flac
+       * Reject JPG, PNG, PDF, TXT, DOCX, ZIP, and non-audio files.
+       */
+      if (!isSupportedAudioFile(file)) {
+        stopAudioPlayback();
+        setAudioFile(null);
+        setRecordedAudioFile(null);
+        setCurrentResult(null);
+        setWaveformData([]);
+        setSpectrogramData([]);
+
+        if (homeFileInputRef.current) {
+          homeFileInputRef.current.value = '';
+        }
+        if (scannerFileInputRef.current) {
+          scannerFileInputRef.current.value = '';
+        }
+        e.target.value = '';
+
+        alert(UNSUPPORTED_AUDIO_ERROR);
+        return;
+      }
+
       /*
        * Basic frontend size protection.
        */
@@ -1955,19 +2075,19 @@ function AppContent() {
           height / 2 +
           Math.sin(
             t * 10 +
-              time * 3
+            time * 3
           ) *
-            12 +
+          12 +
           Math.sin(
             t * 22 +
-              time * 5
+            time * 5
           ) *
-            7 +
+          7 +
           Math.sin(
             t * 38 +
-              time * 7
+            time * 7
           ) *
-            3;
+          3;
 
         if (x === 0) {
           ctx.moveTo(
@@ -2542,7 +2662,7 @@ function AppContent() {
                           mediaRecorderRef
                             .current
                             .state !==
-                            'inactive'
+                          'inactive'
                         ) {
                           mediaRecorderRef.current.stop();
                         }
@@ -2646,7 +2766,7 @@ function AppContent() {
         mediaRecorderRef.current &&
         mediaRecorderRef.current
           .state !==
-          'inactive'
+        'inactive'
       ) {
         mediaRecorderRef.current.stop();
       }
@@ -2690,7 +2810,7 @@ function AppContent() {
       ) {
         audioContextRef.current
           .close()
-          .catch(() => {});
+          .catch(() => { });
 
         audioContextRef.current =
           null;
@@ -2781,11 +2901,11 @@ function AppContent() {
           2,
           '0'
         )}:${remainingSeconds
-        .toString()
-        .padStart(
-          2,
-          '0'
-        )}`;
+          .toString()
+          .padStart(
+            2,
+            '0'
+          )}`;
     };
 
   /*
@@ -2968,35 +3088,32 @@ function AppContent() {
                       tab
                     );
                   }}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 border ${
-                    activeTab ===
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 border ${activeTab ===
                     tab
-                      ? 'text-white bg-[#0d1830]/90 border-[#23406e] shadow-[0_0_12px_rgba(0,212,255,0.12)]'
-                      : 'text-gray-400 hover:text-white border-transparent'
-                  }`}
+                    ? 'text-white bg-[#0d1830]/90 border-[#23406e] shadow-[0_0_12px_rgba(0,212,255,0.12)]'
+                    : 'text-gray-400 hover:text-white border-transparent'
+                    }`}
                 >
 
                   <i
-                    className={`text-xs ${
-                      tab ===
+                    className={`text-xs ${tab ===
                       'home'
-                        ? 'fa-solid fa-house'
-                        : tab ===
-                          'scanner'
+                      ? 'fa-solid fa-house'
+                      : tab ===
+                        'scanner'
                         ? 'fa-solid fa-expand'
                         : tab ===
                           'refer'
-                        ? 'fa-solid fa-gift'
-                        : tab ===
-                          'history'
-                        ? 'fa-solid fa-clock-rotate-left'
-                        : 'fa-solid fa-circle-info'
-                    } ${
-                      activeTab ===
-                      tab
+                          ? 'fa-solid fa-gift'
+                          : tab ===
+                            'history'
+                            ? 'fa-solid fa-clock-rotate-left'
+                            : 'fa-solid fa-circle-info'
+                      } ${activeTab ===
+                        tab
                         ? 'text-[#00d4ff]'
                         : ''
-                    }`}
+                      }`}
                   ></i>
 
                   {tab
@@ -3089,194 +3206,831 @@ function AppContent() {
 
         {activeTab ===
           'home' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
 
-            {/* LEFT */}
+              {/* LEFT */}
 
-            <div className="space-y-8">
+              <div className="space-y-8">
 
-              <div className="relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-[#00d4ff] via-[#a855f7] to-[#00ff88] shadow-[0_0_22px_rgba(0,212,255,0.3)]">
+                <div className="relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-[#00d4ff] via-[#a855f7] to-[#00ff88] shadow-[0_0_22px_rgba(0,212,255,0.3)]">
 
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-4 py-1.5 backdrop-blur-sm">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-4 py-1.5 backdrop-blur-sm">
 
-                  <span className="text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
-                    AI • AUDIO • FORENSICS
-                  </span>
+                    <span className="text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
+                      AI • AUDIO • FORENSICS
+                    </span>
+
+                  </div>
 
                 </div>
 
-              </div>
+                <div>
 
-              <div>
+                  <h2 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-none mb-3">
 
-                <h2 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-none mb-3">
+                    <span className="hero-vox">
+                      Vox
+                    </span>
 
-                  <span className="hero-vox">
-                    Vox
+                    <span className="hero-fore">
+                      Forensics
+                    </span>
+
+                  </h2>
+
+                  <h3 className="text-sm md:text-base tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
+                    Deepfake Audio Detector
+                  </h3>
+
+                </div>
+
+                <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
+
+                  Is that voice{' '}
+
+                  <span className="text-[#00c66a]">
+                    Real
                   </span>
 
-                  <span className="hero-fore">
-                    Forensics
-                  </span>
+                  , or{' '}
 
-                </h2>
+                  <span className="text-[#8b45cd]">
+                    AI-generated
+                  </span>{' '}
 
-                <h3 className="text-sm md:text-base tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
-                  Deepfake Audio Detector
-                </h3>
+                  ?
 
-              </div>
-
-              <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
-
-                Is that voice{' '}
-
-                <span className="text-[#00c66a]">
-                  Real
-                </span>
-
-                , or{' '}
-
-                <span className="text-[#8b45cd]">
-                  AI-generated
-                </span>{' '}
-
-                ?
-
-              </p>
-
-              <p className="text-gray-300 text-sm leading-relaxed max-w-lg drop-shadow">
-                Upload a voice recording and VoxForensics will extract acoustic features and evaluate the clip using a trained machine learning model.
-              </p>
-
-              <div className="flex flex-wrap gap-4">
-
-                <button
-                  onClick={
-                    handleSampleReal
-                  }
-                  className="bg-gradient-to-r from-emerald-600 to-emerald-200 to-teal-400 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(16,185,129,0.3)] hover:shadow-[0_0_32px_rgba(16,185,129,0.45)] hover:brightness-110"
-                >
-
-                  <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
-
-                    <i className="fa-solid fa-play text-[10px]"></i>
-
-                  </span>
-
-                  Try sample: Real voice
-
-                </button>
-
-                <button
-                  onClick={
-                    handleSampleFake
-                  }
-                  className="bg-gradient-to-r from-violet-700 to-purple-200 to-purple-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(168,85,247,0.3)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] hover:brightness-110"
-                >
-
-                  <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
-
-                    <i className="fa-solid fa-robot text-[11px]"></i>
-
-                  </span>
-
-                  Try sample: AI clone
-
-                </button>
-
-              </div>
-
-              <p className="text-xs text-gray-400 tracking-wide drop-shadow">
-                Explore voice authenticity through acoustic analysis and machine learning.
-              </p>
-
-              <div className="pt-8 border-t border-[#1a2a4a]/50">
-
-                <p className="text-xs font-semibold tracking-widest text-gray-400 mb-4 uppercase drop-shadow">
-                  What you get in every scan
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <p className="text-gray-300 text-sm leading-relaxed max-w-lg drop-shadow">
+                  Upload a voice recording and VoxForensics will extract acoustic features and evaluate the clip using a trained machine learning model.
+                </p>
 
-                  <div className="bg-emerald-500/[0.07] border border-emerald-500/30 p-4 rounded-xl backdrop-blur-sm">
+                <div className="flex flex-wrap gap-4">
 
-                    <i className="fa-solid fa-shield-halved text-[#00ff88] text-lg mb-2"></i>
+                  <button
+                    onClick={
+                      handleSampleReal
+                    }
+                    className="bg-gradient-to-r from-emerald-600 to-emerald-200 to-teal-400 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(16,185,129,0.3)] hover:shadow-[0_0_32px_rgba(16,185,129,0.45)] hover:brightness-110"
+                  >
 
-                    <h4 className="text-sm font-semibold text-white mb-1">
-                      Real vs Fake Verdict
-                    </h4>
+                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
 
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      Machine learning classification based on extracted audio characteristics.
-                    </p>
+                      <i className="fa-solid fa-play text-[10px]"></i>
 
-                  </div>
+                    </span>
 
-                  <div className="bg-cyan-500/[0.07] border border-cyan-500/30 p-4 rounded-xl backdrop-blur-sm">
+                    Try sample: Real voice
 
-                    <i className="fa-solid fa-chart-simple text-[#00d4ff] text-lg mb-2"></i>
+                  </button>
 
-                    <h4 className="text-sm font-semibold text-white mb-1">
-                      Feature Evidence
-                    </h4>
+                  <button
+                    onClick={
+                      handleSampleFake
+                    }
+                    className="bg-gradient-to-r from-violet-700 to-purple-200 to-purple-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(168,85,247,0.3)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] hover:brightness-110"
+                  >
 
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      RMS energy, pitch, spectral centroid, ZCR and chroma-based analysis.
-                    </p>
+                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
 
-                  </div>
+                      <i className="fa-solid fa-robot text-[11px]"></i>
 
-                  <div className="bg-purple-500/[0.07] border border-purple-500/30 p-4 rounded-xl backdrop-blur-sm">
+                    </span>
 
-                    <i className="fa-solid fa-wave-square text-[#a855f7] text-lg mb-2"></i>
+                    Try sample: AI clone
 
-                    <h4 className="text-sm font-semibold text-white mb-1">
-                      Visual Proof
-                    </h4>
+                  </button>
 
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      Waveform and spectrogram visualization of the recording.
-                    </p>
+                </div>
 
-                  </div>
+                <p className="text-xs text-gray-400 tracking-wide drop-shadow">
+                  Explore voice authenticity through acoustic analysis and machine learning.
+                </p>
 
-                  <div className="bg-amber-500/[0.07] border border-amber-500/30 p-4 rounded-xl backdrop-blur-sm">
+                <div className="pt-8 border-t border-[#1a2a4a]/50">
 
-                    <i className="fa-solid fa-brain text-amber-400 text-lg mb-2"></i>
+                  <p className="text-xs font-semibold tracking-widest text-gray-400 mb-4 uppercase drop-shadow">
+                    What you get in every scan
+                  </p>
 
-                    <h4 className="text-sm font-semibold text-white mb-1">
-                      Academic Prototype
-                    </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      Built for research, demonstration and academic learning.
-                    </p>
+                    <div className="bg-emerald-500/[0.07] border border-emerald-500/30 p-4 rounded-xl backdrop-blur-sm">
+
+                      <i className="fa-solid fa-shield-halved text-[#00ff88] text-lg mb-2"></i>
+
+                      <h4 className="text-sm font-semibold text-white mb-1">
+                        Real vs Fake Verdict
+                      </h4>
+
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        Machine learning classification based on extracted audio characteristics.
+                      </p>
+
+                    </div>
+
+                    <div className="bg-cyan-500/[0.07] border border-cyan-500/30 p-4 rounded-xl backdrop-blur-sm">
+
+                      <i className="fa-solid fa-chart-simple text-[#00d4ff] text-lg mb-2"></i>
+
+                      <h4 className="text-sm font-semibold text-white mb-1">
+                        Feature Evidence
+                      </h4>
+
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        RMS energy, pitch, spectral centroid, ZCR and chroma-based analysis.
+                      </p>
+
+                    </div>
+
+                    <div className="bg-purple-500/[0.07] border border-purple-500/30 p-4 rounded-xl backdrop-blur-sm">
+
+                      <i className="fa-solid fa-wave-square text-[#a855f7] text-lg mb-2"></i>
+
+                      <h4 className="text-sm font-semibold text-white mb-1">
+                        Visual Proof
+                      </h4>
+
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        Waveform and spectrogram visualization of the recording.
+                      </p>
+
+                    </div>
+
+                    <div className="bg-amber-500/[0.07] border border-amber-500/30 p-4 rounded-xl backdrop-blur-sm">
+
+                      <i className="fa-solid fa-brain text-amber-400 text-lg mb-2"></i>
+
+                      <h4 className="text-sm font-semibold text-white mb-1">
+                        Academic Prototype
+                      </h4>
+
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        Built for research, demonstration and academic learning.
+                      </p>
+
+                    </div>
 
                   </div>
 
                 </div>
+
+              </div>
+
+              {/* RIGHT */}
+
+              <div className="space-y-4 relative">
+
+                <div className="absolute -top-20 -right-20 w-96 h-96 bg-[#a855f7]/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                {/* UPLOAD CARD */}
+
+                <div className="glass-panel p-4 relative z-10 bg-[#050914]/35 backdrop-blur-sm">
+
+                  <h3 className="text-sm font-semibold text-white mb-3">
+                    Scan a Voice Recording
+                  </h3>
+
+                  <div
+                    ref={dropZoneRef}
+                    onClick={() => {
+                      if (
+                        !requireAuthentication()
+                      ) {
+                        return;
+                      }
+
+                      homeFileInputRef.current?.click();
+                    }}
+                    className="border-2 border-dashed border-[#1a2a4a] hover:border-[#00d4ff]/50 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-300 bg-[#050914]/30 mb-3 group"
+                  >
+
+                    <input
+                      ref={
+                        homeFileInputRef
+                      }
+                      type="file"
+                      accept=".wav,.mp3,.m4a,.webm,.ogg,.flac,audio/*"
+                      className="hidden"
+                      onChange={
+                        handleFileUpload
+                      }
+                    />
+
+                    <div className="w-10 h-10 rounded-full bg-[#1a2a4a]/30 flex items-center justify-center mb-2 group-hover:bg-[#00d4ff]/10 transition">
+
+                      <i className="fa-solid fa-cloud-arrow-up text-lg text-gray-400 group-hover:text-[#00d4ff] transition"></i>
+
+                    </div>
+
+                    <p className="text-xs font-medium text-gray-300 mb-1">
+                      Drag & drop an audio file here
+                    </p>
+
+                    <p className="text-[11px] text-gray-500">
+                      or click to upload
+                    </p>
+
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 mb-2">
+
+                    <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
+                      .wav
+                    </span>
+
+                    <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
+                      .mp3
+                    </span>
+
+                    <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
+                      .m4a
+                    </span>
+
+                    <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
+                      .flac
+                    </span>
+
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 text-center">
+                    Max size: 25 MB
+                  </p>
+
+                  {audioFile && (
+
+                    <div className="mt-3 p-2.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg">
+
+                      <div className="flex items-center justify-between">
+
+                        <div className="flex items-center gap-2 overflow-hidden">
+
+                          <i className="fa-solid fa-file-audio text-[#00d4ff] text-sm"></i>
+
+                          <div className="truncate">
+
+                            <p className="text-[11px] font-semibold text-white truncate">
+                              {audioFile.name}
+                            </p>
+
+                            <p className="text-[9px] text-gray-400">
+                              {(
+                                audioFile.size /
+                                (1024 *
+                                  1024)
+                              ).toFixed(
+                                2
+                              )}{' '}
+                              MB
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+
+                            stopAudioPlayback();
+
+                            setAudioFile(
+                              null
+                            );
+
+                            setRecordedAudioFile(
+                              null
+                            );
+
+                            setCurrentResult(
+                              null
+                            );
+
+                            setWaveformData(
+                              []
+                            );
+
+                            setSpectrogramData(
+                              []
+                            );
+                          }}
+                          className="text-gray-400 hover:text-white transition ml-2"
+                          aria-label="Remove audio"
+                        >
+
+                          <i className="fa-solid fa-xmark text-sm"></i>
+
+                        </button>
+
+                      </div>
+
+                      {/* UPLOADED / CURRENT AUDIO PLAYBACK */}
+
+                      {audioPreviewUrl && (
+
+                        <div className="mt-2 pt-2 border-t border-[#00d4ff]/20 flex items-center gap-2">
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+
+                              toggleAudioPlayback();
+                            }}
+                            className="w-8 h-8 rounded-full bg-[#00d4ff]/15 border border-[#00d4ff]/40 flex items-center justify-center text-[#00d4ff] hover:text-white hover:bg-[#00d4ff]/25 transition"
+                            aria-label={
+                              isPlaying
+                                ? 'Pause audio'
+                                : 'Play audio'
+                            }
+                          >
+
+                            <i
+                              className={`fa-solid ${isPlaying
+                                ? 'fa-pause'
+                                : 'fa-play'
+                                } text-[10px]`}
+                            ></i>
+
+                          </button>
+
+                          <div className="flex-1">
+
+                            <p className="text-[10px] text-gray-300">
+                              {recordedAudioFile
+                                ? 'Recorded audio'
+                                : 'Uploaded audio'}
+                            </p>
+
+                            <p className="text-[9px] text-gray-500">
+                              {isPlaying
+                                ? 'Playing...'
+                                : 'Click play to preview'}
+                            </p>
+
+                          </div>
+
+                          <audio
+                            ref={
+                              audioPreviewRef
+                            }
+                            src={
+                              audioPreviewUrl
+                            }
+                            preload="metadata"
+                            className="hidden"
+                          />
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* MICROPHONE CARD */}
+
+                <div className="glass-panel p-4 relative z-10 bg-[#050914]/35 backdrop-blur-sm">
+
+                  <h3 className="text-sm font-semibold text-white mb-3">
+                    Or Record from Your Microphone
+                  </h3>
+
+                  <div className="flex items-center gap-4 mb-3">
+
+                    <button
+                      onClick={
+                        isRecording
+                          ? stopRecording
+                          : startRecording
+                      }
+                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-300 flex-shrink-0 ${isRecording
+                        ? 'recording-pulse border-red-500 text-red-500'
+                        : 'border-[#a855f7]/70 text-[#d8b4fe] hover:text-white hover:border-[#a855f7] shadow-[0_0_16px_rgba(168,85,247,0.3)]'
+                        }`}
+                    >
+
+                      <i
+                        className={`fa-solid ${isRecording
+                          ? 'fa-stop'
+                          : 'fa-microphone'
+                          } text-lg`}
+                      ></i>
+
+                    </button>
+
+                    <div className="flex-1 h-10 flex items-center justify-center gap-1">
+
+                      {isRecording ? (
+
+                        <canvas
+                          ref={
+                            simulatedCanvasRef
+                          }
+                          className="w-full h-full"
+                        />
+
+                      ) : (
+
+                        <>
+
+                          {[
+                            2, 4, 6, 8, 6,
+                            4, 2, 5, 7, 3,
+                            6, 4,
+                          ].map(
+                            (
+                              h,
+                              i
+                            ) => (
+
+                              <div
+                                key={i}
+                                className="visualizer-bar"
+                                style={{
+                                  height: `${h * 3}px`,
+                                }}
+                              ></div>
+
+                            )
+                          )}
+
+                        </>
+
+                      )}
+
+                    </div>
+
+                  </div>
+
+                  <p className="text-[10px] text-gray-400 leading-relaxed mb-3">
+                    Speak a full sentence (2-5 seconds is ideal), then stop to analyze.
+                  </p>
+
+                  <button
+                    onClick={
+                      isRecording
+                        ? stopRecording
+                        : startRecording
+                    }
+                    className={`w-full font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 transition-all duration-300 ${isRecording
+                      ? 'bg-gradient-to-r from-red-500/80 to-red-500/80 hover:from-red-500 hover:to-red-500 text-white'
+                      : 'bg-gradient-to-r from-[#8b5cf6]/50 via-[#6366f1]/50 to-[#22d3ee]/50 text-white shadow-[0_0_20px_rgba(139,92,246,0.35)] hover:shadow-[0_0_28px_rgba(139,92,246,0.5)] hover:brightness-125'
+                      }`}
+                  >
+
+                    <i
+                      className={`fa-solid ${isRecording
+                        ? 'fa-stop'
+                        : 'fa-circle'
+                        } text-[10px]`}
+                    ></i>
+
+                    {isRecording
+                      ? `Stop Recording (${formatTime(
+                        recordingTime
+                      )})`
+                      : 'Start Recording'}
+
+                  </button>
+
+                  {/* RECORDED AUDIO PLAYBACK */}
+
+                  {recordedAudioFile &&
+                    !isRecording &&
+                    audioPreviewUrl && (
+
+                      <div className="mt-3 p-3 rounded-lg bg-[#a855f7]/10 border border-[#a855f7]/30">
+
+                        <div className="flex items-center gap-3">
+
+                          <button
+                            onClick={
+                              toggleAudioPlayback
+                            }
+                            className="w-9 h-9 rounded-full bg-[#a855f7]/20 border border-[#a855f7]/50 flex items-center justify-center text-[#d8b4fe] hover:text-white hover:bg-[#a855f7]/30 transition flex-shrink-0"
+                            aria-label={
+                              isPlaying
+                                ? 'Pause recorded audio'
+                                : 'Play recorded audio'
+                            }
+                          >
+
+                            <i
+                              className={`fa-solid ${isPlaying
+                                ? 'fa-pause'
+                                : 'fa-play'
+                                } text-[10px]`}
+                            ></i>
+
+                          </button>
+
+                          <div className="min-w-0 flex-1">
+
+                            <p className="text-[11px] font-semibold text-white">
+                              Recording complete
+                            </p>
+
+                            <p className="text-[9px] text-gray-400 truncate">
+                              {
+                                recordedAudioFile.name
+                              }
+                            </p>
+
+                          </div>
+
+                          <span className="text-[9px] text-[#a855f7] font-semibold uppercase tracking-wider">
+                            {isPlaying
+                              ? 'Playing'
+                              : 'Ready'}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                </div>
+
+                {/* ANALYZING */}
+
+                {isAnalyzing && (
+
+                  <div className="glass-panel p-6 relative z-10 fade-in">
+
+                    <h3 className="text-base font-semibold text-white mb-4">
+                      Analysis Results
+                    </h3>
+
+                    <div className="flex flex-col items-center justify-center py-8">
+
+                      <div className="loader mb-4"></div>
+
+                      <p className="text-sm text-gray-400">
+                        Extracting features & classifying...
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* RESULTS */}
+
+                {currentResult &&
+                  !isAnalyzing && (
+
+                    <div className="glass-panel p-6 relative z-10 fade-in">
+
+                      <h3 className="text-base font-semibold text-white mb-4">
+                        Analysis Results
+                      </h3>
+
+                      <div className="space-y-4">
+
+                        {(() => {
+
+                          const verdictPresentation =
+                            getVerdictPresentation(
+                              currentResult
+                            );
+
+                          return (
+
+                            <div className="flex items-center justify-between p-4 bg-[#1a2a4a]/30 rounded-xl border border-[#1a2a4a]">
+
+                              <div>
+
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                                  Verdict
+                                </p>
+
+                                <p
+                                  className={`text-2xl font-bold ${verdictPresentation.textClass}`}
+                                >
+                                  {
+                                    verdictPresentation.label
+                                  }
+                                </p>
+
+                              </div>
+
+                              <div className="text-right">
+
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                                  Confidence
+                                </p>
+
+                                <p
+                                  className={`text-2xl font-bold ${verdictPresentation.textClass}`}
+                                >
+                                  {currentResult.confidence.toFixed(
+                                    1
+                                  )}
+                                  %
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                          );
+
+                        })()}
+
+                        <div className="flex items-center justify-between">
+
+                          <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                            Acoustic Features
+                          </p>
+
+                          <span className="px-2 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
+                            45 FEATURES ANALYZED
+                          </span>
+
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+
+                          <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              RMS Energy
+                            </p>
+
+                            <p className="text-xs font-mono text-[#00d4ff]">
+                              {currentResult.features.rmsEnergy.toFixed(
+                                3
+                              )}
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              Pitch
+                            </p>
+
+                            <p className="text-xs font-mono text-[#00d4ff]">
+                              {currentResult.features.pitchVariation.toFixed(
+                                1
+                              )}{' '}
+                              Hz
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              Centroid
+                            </p>
+
+                            <p className="text-xs font-mono text-[#00d4ff]">
+                              {(
+                                currentResult
+                                  .features
+                                  .spectralCentroid /
+                                1000
+                              ).toFixed(
+                                1
+                              )}{' '}
+                              kHz
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              ZCR
+                            </p>
+
+                            <p className="text-xs font-mono text-[#00d4ff]">
+                              {currentResult.features.zeroCrossingRate.toFixed(
+                                3
+                              )}
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        {currentResult.explanation && (
+
+                          <div className="p-3 rounded-lg bg-[#050914]/50 border border-[#1a2a4a]">
+
+                            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                              Analysis Summary
+                            </p>
+
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              {
+                                currentResult.explanation
+                              }
+                            </p>
+
+                          </div>
+
+                        )}
+
+                        <div className="waveform-container">
+
+                          <canvas
+                            ref={
+                              canvasWaveformRef
+                            }
+                            className="w-full h-16"
+                          />
+
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            stopAudioPlayback();
+
+                            setCurrentResult(
+                              null
+                            );
+
+                            setAudioFile(
+                              null
+                            );
+
+                            setRecordedAudioFile(
+                              null
+                            );
+
+                            setWaveformData(
+                              []
+                            );
+
+                            setSpectrogramData(
+                              []
+                            );
+                          }}
+                          className="w-full text-xs text-[#00d4ff] hover:text-white transition underline"
+                        >
+                          Scan another file
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  )}
 
               </div>
 
             </div>
+          )}
 
-            {/* RIGHT */}
+        {/* ================================================== */}
+        {/* SCANNER */}
+        {/* ================================================== */}
 
-            <div className="space-y-4 relative">
+        {activeTab ===
+          'scanner' && (
 
-              <div className="absolute -top-20 -right-20 w-96 h-96 bg-[#a855f7]/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="max-w-4xl mx-auto space-y-6">
+
+              {/* HEADER */}
+
+              <div>
+
+                <h2 className="text-3xl font-bold text-white">
+                  Advanced Scanner
+                </h2>
+
+                <p className="text-gray-400 text-sm mt-2">
+                  Upload an audio file for detailed machine learning analysis.
+                </p>
+
+              </div>
 
               {/* UPLOAD CARD */}
 
-              <div className="glass-panel p-4 relative z-10 bg-[#050914]/35 backdrop-blur-sm">
+              <div className="glass-panel p-6">
 
-                <h3 className="text-sm font-semibold text-white mb-3">
-                  Scan a Voice Recording
-                </h3>
+                <input
+                  ref={
+                    scannerFileInputRef
+                  }
+                  type="file"
+                  accept=".wav,.mp3,.m4a,.webm,.ogg,.flac,audio/*"
+                  className="hidden"
+                  onChange={
+                    handleFileUpload
+                  }
+                />
 
                 <div
-                  ref={dropZoneRef}
                   onClick={() => {
                     if (
                       !requireAuthentication()
@@ -3284,80 +4038,76 @@ function AppContent() {
                       return;
                     }
 
-                    homeFileInputRef.current?.click();
+                    scannerFileInputRef.current?.click();
                   }}
-                  className="border-2 border-dashed border-[#1a2a4a] hover:border-[#00d4ff]/50 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-300 bg-[#050914]/30 mb-3 group"
+                  className="border-2 border-dashed border-[#1a2a4a] hover:border-[#00d4ff]/50 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-300 bg-[#050914]/30 group"
                 >
 
-                  <input
-                    ref={
-                      homeFileInputRef
-                    }
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={
-                      handleFileUpload
-                    }
-                  />
+                  <div className="w-14 h-14 rounded-full bg-[#1a2a4a]/30 flex items-center justify-center mb-4 group-hover:bg-[#00d4ff]/10 transition">
 
-                  <div className="w-10 h-10 rounded-full bg-[#1a2a4a]/30 flex items-center justify-center mb-2 group-hover:bg-[#00d4ff]/10 transition">
-
-                    <i className="fa-solid fa-cloud-arrow-up text-lg text-gray-400 group-hover:text-[#00d4ff] transition"></i>
+                    <i className="fa-solid fa-cloud-arrow-up text-2xl text-gray-400 group-hover:text-[#00d4ff] transition"></i>
 
                   </div>
 
-                  <p className="text-xs font-medium text-gray-300 mb-1">
-                    Drag & drop an audio file here
+                  <p className="text-sm font-medium text-gray-300 mb-1">
+                    Upload an audio file
                   </p>
 
-                  <p className="text-[11px] text-gray-500">
-                    or click to upload
+                  <p className="text-xs text-gray-500">
+                    Click here to select a recording
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+
+                    <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
+                      .wav
+                    </span>
+
+                    <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
+                      .mp3
+                    </span>
+
+                    <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
+                      .m4a
+                    </span>
+
+                    <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
+                      .flac
+                    </span>
+
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 mt-3">
+                    Maximum file size: 25 MB
                   </p>
 
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-1.5 mb-2">
-
-                  <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
-                    .wav
-                  </span>
-
-                  <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
-                    .mp3
-                  </span>
-
-                  <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
-                    .m4a
-                  </span>
-
-                  <span className="px-2.5 py-1 rounded-full bg-[#1a2a4a]/50 text-[9px] font-semibold tracking-wider text-gray-400">
-                    .flac
-                  </span>
-
-                </div>
-
-                <p className="text-[10px] text-gray-500 text-center">
-                  Max size: 25 MB
-                </p>
+                {/* SELECTED FILE */}
 
                 {audioFile && (
 
-                  <div className="mt-3 p-2.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg">
+                  <div className="mt-4 p-3 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg">
 
                     <div className="flex items-center justify-between">
 
-                      <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex items-center gap-3 overflow-hidden">
 
-                        <i className="fa-solid fa-file-audio text-[#00d4ff] text-sm"></i>
+                        <div className="w-9 h-9 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center flex-shrink-0">
+
+                          <i className="fa-solid fa-file-audio text-[#00d4ff]"></i>
+
+                        </div>
 
                         <div className="truncate">
 
-                          <p className="text-[11px] font-semibold text-white truncate">
-                            {audioFile.name}
+                          <p className="text-sm font-semibold text-white truncate">
+                            {
+                              audioFile.name
+                            }
                           </p>
 
-                          <p className="text-[9px] text-gray-400">
+                          <p className="text-[10px] text-gray-400">
                             {(
                               audioFile.size /
                               (1024 *
@@ -3398,21 +4148,21 @@ function AppContent() {
                             []
                           );
                         }}
-                        className="text-gray-400 hover:text-white transition ml-2"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition ml-3"
                         aria-label="Remove audio"
                       >
 
-                        <i className="fa-solid fa-xmark text-sm"></i>
+                        <i className="fa-solid fa-xmark"></i>
 
                       </button>
 
                     </div>
 
-                    {/* UPLOADED / CURRENT AUDIO PLAYBACK */}
+                    {/* AUDIO PREVIEW */}
 
                     {audioPreviewUrl && (
 
-                      <div className="mt-2 pt-2 border-t border-[#00d4ff]/20 flex items-center gap-2">
+                      <div className="mt-3 pt-3 border-t border-[#00d4ff]/20 flex items-center gap-3">
 
                         <button
                           onClick={(e) => {
@@ -3420,7 +4170,7 @@ function AppContent() {
 
                             toggleAudioPlayback();
                           }}
-                          className="w-8 h-8 rounded-full bg-[#00d4ff]/15 border border-[#00d4ff]/40 flex items-center justify-center text-[#00d4ff] hover:text-white hover:bg-[#00d4ff]/25 transition"
+                          className="w-9 h-9 rounded-full bg-[#00d4ff]/15 border border-[#00d4ff]/40 flex items-center justify-center text-[#00d4ff] hover:text-white hover:bg-[#00d4ff]/25 transition flex-shrink-0"
                           aria-label={
                             isPlaying
                               ? 'Pause audio'
@@ -3429,18 +4179,17 @@ function AppContent() {
                         >
 
                           <i
-                            className={`fa-solid ${
-                              isPlaying
-                                ? 'fa-pause'
-                                : 'fa-play'
-                            } text-[10px]`}
+                            className={`fa-solid ${isPlaying
+                              ? 'fa-pause'
+                              : 'fa-play'
+                              } text-[10px]`}
                           ></i>
 
                         </button>
 
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
 
-                          <p className="text-[10px] text-gray-300">
+                          <p className="text-[11px] text-gray-300">
                             {recordedAudioFile
                               ? 'Recorded audio'
                               : 'Uploaded audio'}
@@ -3475,192 +4224,44 @@ function AppContent() {
 
               </div>
 
-              {/* MICROPHONE CARD */}
-
-              <div className="glass-panel p-4 relative z-10 bg-[#050914]/35 backdrop-blur-sm">
-
-                <h3 className="text-sm font-semibold text-white mb-3">
-                  Or Record from Your Microphone
-                </h3>
-
-                <div className="flex items-center gap-4 mb-3">
-
-                  <button
-                    onClick={
-                      isRecording
-                        ? stopRecording
-                        : startRecording
-                    }
-                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-300 flex-shrink-0 ${
-                      isRecording
-                        ? 'recording-pulse border-red-500 text-red-500'
-                        : 'border-[#a855f7]/70 text-[#d8b4fe] hover:text-white hover:border-[#a855f7] shadow-[0_0_16px_rgba(168,85,247,0.3)]'
-                    }`}
-                  >
-
-                    <i
-                      className={`fa-solid ${
-                        isRecording
-                          ? 'fa-stop'
-                          : 'fa-microphone'
-                      } text-lg`}
-                    ></i>
-
-                  </button>
-
-                  <div className="flex-1 h-10 flex items-center justify-center gap-1">
-
-                    {isRecording ? (
-
-                      <canvas
-                        ref={
-                          simulatedCanvasRef
-                        }
-                        className="w-full h-full"
-                      />
-
-                    ) : (
-
-                      <>
-
-                        {[
-                          2, 4, 6, 8, 6,
-                          4, 2, 5, 7, 3,
-                          6, 4,
-                        ].map(
-                          (
-                            h,
-                            i
-                          ) => (
-
-                            <div
-                              key={i}
-                              className="visualizer-bar"
-                              style={{
-                                height: `${h * 3}px`,
-                              }}
-                            ></div>
-
-                          )
-                        )}
-
-                      </>
-
-                    )}
-
-                  </div>
-
-                </div>
-
-                <p className="text-[10px] text-gray-400 leading-relaxed mb-3">
-                  Speak a full sentence (2-5 seconds is ideal), then stop to analyze.
-                </p>
-
-                <button
-                  onClick={
-                    isRecording
-                      ? stopRecording
-                      : startRecording
-                  }
-                  className={`w-full font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
-                    isRecording
-                      ? 'bg-gradient-to-r from-red-500/80 to-red-500/80 hover:from-red-500 hover:to-red-500 text-white'
-                      : 'bg-gradient-to-r from-[#8b5cf6]/50 via-[#6366f1]/50 to-[#22d3ee]/50 text-white shadow-[0_0_20px_rgba(139,92,246,0.35)] hover:shadow-[0_0_28px_rgba(139,92,246,0.5)] hover:brightness-125'
-                  }`}
-                >
-
-                  <i
-                    className={`fa-solid ${
-                      isRecording
-                        ? 'fa-stop'
-                        : 'fa-circle'
-                    } text-[10px]`}
-                  ></i>
-
-                  {isRecording
-                    ? `Stop Recording (${formatTime(
-                        recordingTime
-                      )})`
-                    : 'Start Recording'}
-
-                </button>
-
-                {/* RECORDED AUDIO PLAYBACK */}
-
-                {recordedAudioFile &&
-                  !isRecording &&
-                  audioPreviewUrl && (
-
-                    <div className="mt-3 p-3 rounded-lg bg-[#a855f7]/10 border border-[#a855f7]/30">
-
-                      <div className="flex items-center gap-3">
-
-                        <button
-                          onClick={
-                            toggleAudioPlayback
-                          }
-                          className="w-9 h-9 rounded-full bg-[#a855f7]/20 border border-[#a855f7]/50 flex items-center justify-center text-[#d8b4fe] hover:text-white hover:bg-[#a855f7]/30 transition flex-shrink-0"
-                          aria-label={
-                            isPlaying
-                              ? 'Pause recorded audio'
-                              : 'Play recorded audio'
-                          }
-                        >
-
-                          <i
-                            className={`fa-solid ${
-                              isPlaying
-                                ? 'fa-pause'
-                                : 'fa-play'
-                            } text-[10px]`}
-                          ></i>
-
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-
-                          <p className="text-[11px] font-semibold text-white">
-                            Recording complete
-                          </p>
-
-                          <p className="text-[9px] text-gray-400 truncate">
-                            {
-                              recordedAudioFile.name
-                            }
-                          </p>
-
-                        </div>
-
-                        <span className="text-[9px] text-[#a855f7] font-semibold uppercase tracking-wider">
-                          {isPlaying
-                            ? 'Playing'
-                            : 'Ready'}
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-              </div>
-
               {/* ANALYZING */}
 
               {isAnalyzing && (
 
-                <div className="glass-panel p-6 relative z-10 fade-in">
+                <div className="glass-panel p-6 fade-in">
 
-                  <h3 className="text-base font-semibold text-white mb-4">
-                    Analysis Results
-                  </h3>
+                  <div className="flex items-center justify-between mb-6">
+
+                    <div>
+
+                      <h3 className="text-base font-semibold text-white">
+                        Analysis in Progress
+                      </h3>
+
+                      <p className="text-xs text-gray-500 mt-1">
+                        Processing the selected audio file...
+                      </p>
+
+                    </div>
+
+                    <div className="w-9 h-9 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 flex items-center justify-center">
+
+                      <i className="fa-solid fa-wave-square text-[#00d4ff]"></i>
+
+                    </div>
+
+                  </div>
 
                   <div className="flex flex-col items-center justify-center py-8">
 
-                    <div className="loader mb-4"></div>
+                    <div className="loader mb-5"></div>
 
-                    <p className="text-sm text-gray-400">
+                    <p className="text-sm text-gray-300">
                       Extracting features & classifying...
+                    </p>
+
+                    <p className="text-xs text-gray-500 mt-2">
+                      Please wait while VoxForensics analyzes the recording.
                     </p>
 
                   </div>
@@ -3674,13 +4275,33 @@ function AppContent() {
               {currentResult &&
                 !isAnalyzing && (
 
-                  <div className="glass-panel p-6 relative z-10 fade-in">
+                  <div className="glass-panel p-6 fade-in">
 
-                    <h3 className="text-base font-semibold text-white mb-4">
-                      Analysis Results
-                    </h3>
+                    <div className="flex items-center justify-between mb-5">
 
-                    <div className="space-y-4">
+                      <div>
+
+                        <h3 className="text-lg font-semibold text-white">
+                          Analysis Results
+                        </h3>
+
+                        <p className="text-xs text-gray-500 mt-1">
+                          Machine learning analysis of the selected recording
+                        </p>
+
+                      </div>
+
+                      <div className="w-10 h-10 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 flex items-center justify-center">
+
+                        <i className="fa-solid fa-chart-line text-[#00d4ff]"></i>
+
+                      </div>
+
+                    </div>
+
+                    <div className="space-y-5">
+
+                      {/* VERDICT */}
 
                       {(() => {
 
@@ -3691,16 +4312,16 @@ function AppContent() {
 
                         return (
 
-                          <div className="flex items-center justify-between p-4 bg-[#1a2a4a]/30 rounded-xl border border-[#1a2a4a]">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-[#1a2a4a]/30 rounded-xl border border-[#1a2a4a]">
 
                             <div>
 
-                              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">
                                 Verdict
                               </p>
 
                               <p
-                                className={`text-2xl font-bold ${verdictPresentation.textClass}`}
+                                className={`text-2xl sm:text-3xl font-bold ${verdictPresentation.textClass}`}
                               >
                                 {
                                   verdictPresentation.label
@@ -3709,14 +4330,14 @@ function AppContent() {
 
                             </div>
 
-                            <div className="text-right">
+                            <div className="sm:text-right">
 
-                              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">
                                 Confidence
                               </p>
 
                               <p
-                                className={`text-2xl font-bold ${verdictPresentation.textClass}`}
+                                className={`text-2xl sm:text-3xl font-bold ${verdictPresentation.textClass}`}
                               >
                                 {currentResult.confidence.toFixed(
                                   1
@@ -3732,94 +4353,102 @@ function AppContent() {
 
                       })()}
 
-                      <div className="flex items-center justify-between">
+                      {/* FEATURES */}
 
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">
-                          Acoustic Features
-                        </p>
+                      <div>
 
-                        <span className="px-2 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
-                          45 FEATURES ANALYZED
-                        </span>
+                        <div className="flex items-center justify-between mb-3">
+
+                          <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                            Acoustic Features
+                          </p>
+
+                          <span className="px-2.5 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
+                            45 FEATURES ANALYZED
+                          </span>
+
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+                          <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              RMS Energy
+                            </p>
+
+                            <p className="text-sm font-mono text-[#00d4ff] mt-1">
+                              {currentResult.features.rmsEnergy.toFixed(
+                                3
+                              )}
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              Pitch
+                            </p>
+
+                            <p className="text-sm font-mono text-[#00d4ff] mt-1">
+                              {currentResult.features.pitchVariation.toFixed(
+                                1
+                              )}{' '}
+                              Hz
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              Centroid
+                            </p>
+
+                            <p className="text-sm font-mono text-[#00d4ff] mt-1">
+                              {(
+                                currentResult
+                                  .features
+                                  .spectralCentroid /
+                                1000
+                              ).toFixed(
+                                1
+                              )}{' '}
+                              kHz
+                            </p>
+
+                          </div>
+
+                          <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
+
+                            <p className="text-[10px] text-gray-500 uppercase">
+                              ZCR
+                            </p>
+
+                            <p className="text-sm font-mono text-[#00d4ff] mt-1">
+                              {currentResult.features.zeroCrossingRate.toFixed(
+                                3
+                              )}
+                            </p>
+
+                          </div>
+
+                        </div>
 
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-
-                        <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
-
-                          <p className="text-[10px] text-gray-500 uppercase">
-                            RMS Energy
-                          </p>
-
-                          <p className="text-xs font-mono text-[#00d4ff]">
-                            {currentResult.features.rmsEnergy.toFixed(
-                              3
-                            )}
-                          </p>
-
-                        </div>
-
-                        <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
-
-                          <p className="text-[10px] text-gray-500 uppercase">
-                            Pitch
-                          </p>
-
-                          <p className="text-xs font-mono text-[#00d4ff]">
-                            {currentResult.features.pitchVariation.toFixed(
-                              1
-                            )}{' '}
-                            Hz
-                          </p>
-
-                        </div>
-
-                        <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
-
-                          <p className="text-[10px] text-gray-500 uppercase">
-                            Centroid
-                          </p>
-
-                          <p className="text-xs font-mono text-[#00d4ff]">
-                            {(
-                              currentResult
-                                .features
-                                .spectralCentroid /
-                              1000
-                            ).toFixed(
-                              1
-                            )}{' '}
-                            kHz
-                          </p>
-
-                        </div>
-
-                        <div className="bg-[#050914]/50 p-2 rounded-lg text-center">
-
-                          <p className="text-[10px] text-gray-500 uppercase">
-                            ZCR
-                          </p>
-
-                          <p className="text-xs font-mono text-[#00d4ff]">
-                            {currentResult.features.zeroCrossingRate.toFixed(
-                              3
-                            )}
-                          </p>
-
-                        </div>
-
-                      </div>
+                      {/* EXPLANATION */}
 
                       {currentResult.explanation && (
 
-                        <div className="p-3 rounded-lg bg-[#050914]/50 border border-[#1a2a4a]">
+                        <div className="p-4 rounded-lg bg-[#050914]/50 border border-[#1a2a4a]">
 
-                          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">
                             Analysis Summary
                           </p>
 
-                          <p className="text-xs text-gray-400 leading-relaxed">
+                          <p className="text-sm text-gray-400 leading-relaxed">
                             {
                               currentResult.explanation
                             }
@@ -3829,16 +4458,28 @@ function AppContent() {
 
                       )}
 
-                      <div className="waveform-container">
+                      {/* WAVEFORM */}
 
-                        <canvas
-                          ref={
-                            canvasWaveformRef
-                          }
-                          className="w-full h-16"
-                        />
+                      <div>
+
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">
+                          Audio Waveform
+                        </p>
+
+                        <div className="waveform-container">
+
+                          <canvas
+                            ref={
+                              canvasWaveformRef
+                            }
+                            className="w-full h-20"
+                          />
+
+                        </div>
 
                       </div>
+
+                      {/* ACTION */}
 
                       <button
                         onClick={() => {
@@ -3864,9 +4505,13 @@ function AppContent() {
                             []
                           );
                         }}
-                        className="w-full text-xs text-[#00d4ff] hover:text-white transition underline"
+                        className="w-full py-3 text-sm font-medium text-[#00d4ff] border border-[#00d4ff]/20 rounded-lg hover:bg-[#00d4ff]/5 hover:text-white transition"
                       >
-                        Scan another file
+
+                        <i className="fa-solid fa-rotate-right mr-2"></i>
+
+                        Scan Another File
+
                       </button>
 
                     </div>
@@ -3877,542 +4522,7 @@ function AppContent() {
 
             </div>
 
-          </div>
-        )}
-
-        {/* ================================================== */}
-        {/* SCANNER */}
-        {/* ================================================== */}
-
-        {activeTab ===
-          'scanner' && (
-
-          <div className="max-w-4xl mx-auto space-y-6">
-
-            {/* HEADER */}
-
-            <div>
-
-              <h2 className="text-3xl font-bold text-white">
-                Advanced Scanner
-              </h2>
-
-              <p className="text-gray-400 text-sm mt-2">
-                Upload an audio file for detailed machine learning analysis.
-              </p>
-
-            </div>
-
-            {/* UPLOAD CARD */}
-
-            <div className="glass-panel p-6">
-
-              <input
-                ref={
-                  scannerFileInputRef
-                }
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={
-                  handleFileUpload
-                }
-              />
-
-              <div
-                onClick={() => {
-                  if (
-                    !requireAuthentication()
-                  ) {
-                    return;
-                  }
-
-                  scannerFileInputRef.current?.click();
-                }}
-                className="border-2 border-dashed border-[#1a2a4a] hover:border-[#00d4ff]/50 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-300 bg-[#050914]/30 group"
-              >
-
-                <div className="w-14 h-14 rounded-full bg-[#1a2a4a]/30 flex items-center justify-center mb-4 group-hover:bg-[#00d4ff]/10 transition">
-
-                  <i className="fa-solid fa-cloud-arrow-up text-2xl text-gray-400 group-hover:text-[#00d4ff] transition"></i>
-
-                </div>
-
-                <p className="text-sm font-medium text-gray-300 mb-1">
-                  Upload an audio file
-                </p>
-
-                <p className="text-xs text-gray-500">
-                  Click here to select a recording
-                </p>
-
-                <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-
-                  <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
-                    .wav
-                  </span>
-
-                  <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
-                    .mp3
-                  </span>
-
-                  <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
-                    .m4a
-                  </span>
-
-                  <span className="px-3 py-1 rounded-full bg-[#1a2a4a]/50 text-[10px] font-semibold tracking-wider text-gray-400">
-                    .flac
-                  </span>
-
-                </div>
-
-                <p className="text-[10px] text-gray-500 mt-3">
-                  Maximum file size: 25 MB
-                </p>
-
-              </div>
-
-              {/* SELECTED FILE */}
-
-              {audioFile && (
-
-                <div className="mt-4 p-3 bg-[#00d4ff]/10 border border-[#00d4ff]/30 rounded-lg">
-
-                  <div className="flex items-center justify-between">
-
-                    <div className="flex items-center gap-3 overflow-hidden">
-
-                      <div className="w-9 h-9 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center flex-shrink-0">
-
-                        <i className="fa-solid fa-file-audio text-[#00d4ff]"></i>
-
-                      </div>
-
-                      <div className="truncate">
-
-                        <p className="text-sm font-semibold text-white truncate">
-                          {
-                            audioFile.name
-                          }
-                        </p>
-
-                        <p className="text-[10px] text-gray-400">
-                          {(
-                            audioFile.size /
-                            (1024 *
-                              1024)
-                          ).toFixed(
-                            2
-                          )}{' '}
-                          MB
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-
-                        stopAudioPlayback();
-
-                        setAudioFile(
-                          null
-                        );
-
-                        setRecordedAudioFile(
-                          null
-                        );
-
-                        setCurrentResult(
-                          null
-                        );
-
-                        setWaveformData(
-                          []
-                        );
-
-                        setSpectrogramData(
-                          []
-                        );
-                      }}
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition ml-3"
-                      aria-label="Remove audio"
-                    >
-
-                      <i className="fa-solid fa-xmark"></i>
-
-                    </button>
-
-                  </div>
-
-                  {/* AUDIO PREVIEW */}
-
-                  {audioPreviewUrl && (
-
-                    <div className="mt-3 pt-3 border-t border-[#00d4ff]/20 flex items-center gap-3">
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-
-                          toggleAudioPlayback();
-                        }}
-                        className="w-9 h-9 rounded-full bg-[#00d4ff]/15 border border-[#00d4ff]/40 flex items-center justify-center text-[#00d4ff] hover:text-white hover:bg-[#00d4ff]/25 transition flex-shrink-0"
-                        aria-label={
-                          isPlaying
-                            ? 'Pause audio'
-                            : 'Play audio'
-                        }
-                      >
-
-                        <i
-                          className={`fa-solid ${
-                            isPlaying
-                              ? 'fa-pause'
-                              : 'fa-play'
-                          } text-[10px]`}
-                        ></i>
-
-                      </button>
-
-                      <div className="flex-1 min-w-0">
-
-                        <p className="text-[11px] text-gray-300">
-                          {recordedAudioFile
-                            ? 'Recorded audio'
-                            : 'Uploaded audio'}
-                        </p>
-
-                        <p className="text-[9px] text-gray-500">
-                          {isPlaying
-                            ? 'Playing...'
-                            : 'Click play to preview'}
-                        </p>
-
-                      </div>
-
-                      <audio
-                        ref={
-                          audioPreviewRef
-                        }
-                        src={
-                          audioPreviewUrl
-                        }
-                        preload="metadata"
-                        className="hidden"
-                      />
-
-                    </div>
-
-                  )}
-
-                </div>
-
-              )}
-
-            </div>
-
-            {/* ANALYZING */}
-
-            {isAnalyzing && (
-
-              <div className="glass-panel p-6 fade-in">
-
-                <div className="flex items-center justify-between mb-6">
-
-                  <div>
-
-                    <h3 className="text-base font-semibold text-white">
-                      Analysis in Progress
-                    </h3>
-
-                    <p className="text-xs text-gray-500 mt-1">
-                      Processing the selected audio file...
-                    </p>
-
-                  </div>
-
-                  <div className="w-9 h-9 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 flex items-center justify-center">
-
-                    <i className="fa-solid fa-wave-square text-[#00d4ff]"></i>
-
-                  </div>
-
-                </div>
-
-                <div className="flex flex-col items-center justify-center py-8">
-
-                  <div className="loader mb-5"></div>
-
-                  <p className="text-sm text-gray-300">
-                    Extracting features & classifying...
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-2">
-                    Please wait while VoxForensics analyzes the recording.
-                  </p>
-
-                </div>
-
-              </div>
-
-            )}
-
-            {/* RESULTS */}
-
-            {currentResult &&
-              !isAnalyzing && (
-
-              <div className="glass-panel p-6 fade-in">
-
-                <div className="flex items-center justify-between mb-5">
-
-                  <div>
-
-                    <h3 className="text-lg font-semibold text-white">
-                      Analysis Results
-                    </h3>
-
-                    <p className="text-xs text-gray-500 mt-1">
-                      Machine learning analysis of the selected recording
-                    </p>
-
-                  </div>
-
-                  <div className="w-10 h-10 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 flex items-center justify-center">
-
-                    <i className="fa-solid fa-chart-line text-[#00d4ff]"></i>
-
-                  </div>
-
-                </div>
-
-                <div className="space-y-5">
-
-                  {/* VERDICT */}
-
-                  {(() => {
-
-                    const verdictPresentation =
-                      getVerdictPresentation(
-                        currentResult
-                      );
-
-                    return (
-
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-[#1a2a4a]/30 rounded-xl border border-[#1a2a4a]">
-
-                        <div>
-
-                          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">
-                            Verdict
-                          </p>
-
-                          <p
-                            className={`text-2xl sm:text-3xl font-bold ${verdictPresentation.textClass}`}
-                          >
-                            {
-                              verdictPresentation.label
-                            }
-                          </p>
-
-                        </div>
-
-                        <div className="sm:text-right">
-
-                          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">
-                            Confidence
-                          </p>
-
-                          <p
-                            className={`text-2xl sm:text-3xl font-bold ${verdictPresentation.textClass}`}
-                          >
-                            {currentResult.confidence.toFixed(
-                              1
-                            )}
-                            %
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                    );
-
-                  })()}
-
-                  {/* FEATURES */}
-
-                  <div>
-
-                    <div className="flex items-center justify-between mb-3">
-
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest">
-                        Acoustic Features
-                      </p>
-
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[9px] font-semibold tracking-wider text-[#00d4ff]">
-                        45 FEATURES ANALYZED
-                      </span>
-
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-
-                      <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
-
-                        <p className="text-[10px] text-gray-500 uppercase">
-                          RMS Energy
-                        </p>
-
-                        <p className="text-sm font-mono text-[#00d4ff] mt-1">
-                          {currentResult.features.rmsEnergy.toFixed(
-                            3
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
-
-                        <p className="text-[10px] text-gray-500 uppercase">
-                          Pitch
-                        </p>
-
-                        <p className="text-sm font-mono text-[#00d4ff] mt-1">
-                          {currentResult.features.pitchVariation.toFixed(
-                            1
-                          )}{' '}
-                          Hz
-                        </p>
-
-                      </div>
-
-                      <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
-
-                        <p className="text-[10px] text-gray-500 uppercase">
-                          Centroid
-                        </p>
-
-                        <p className="text-sm font-mono text-[#00d4ff] mt-1">
-                          {(
-                            currentResult
-                              .features
-                              .spectralCentroid /
-                            1000
-                          ).toFixed(
-                            1
-                          )}{' '}
-                          kHz
-                        </p>
-
-                      </div>
-
-                      <div className="bg-[#050914]/50 p-3 rounded-lg border border-[#1a2a4a] text-center">
-
-                        <p className="text-[10px] text-gray-500 uppercase">
-                          ZCR
-                        </p>
-
-                        <p className="text-sm font-mono text-[#00d4ff] mt-1">
-                          {currentResult.features.zeroCrossingRate.toFixed(
-                            3
-                          )}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                  {/* EXPLANATION */}
-
-                  {currentResult.explanation && (
-
-                    <div className="p-4 rounded-lg bg-[#050914]/50 border border-[#1a2a4a]">
-
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">
-                        Analysis Summary
-                      </p>
-
-                      <p className="text-sm text-gray-400 leading-relaxed">
-                        {
-                          currentResult.explanation
-                        }
-                      </p>
-
-                    </div>
-
-                  )}
-
-                  {/* WAVEFORM */}
-
-                  <div>
-
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">
-                      Audio Waveform
-                    </p>
-
-                    <div className="waveform-container">
-
-                      <canvas
-                        ref={
-                          canvasWaveformRef
-                        }
-                        className="w-full h-20"
-                      />
-
-                    </div>
-
-                  </div>
-
-                  {/* ACTION */}
-
-                  <button
-                    onClick={() => {
-                      stopAudioPlayback();
-
-                      setCurrentResult(
-                        null
-                      );
-
-                      setAudioFile(
-                        null
-                      );
-
-                      setRecordedAudioFile(
-                        null
-                      );
-
-                      setWaveformData(
-                        []
-                      );
-
-                      setSpectrogramData(
-                        []
-                      );
-                    }}
-                    className="w-full py-3 text-sm font-medium text-[#00d4ff] border border-[#00d4ff]/20 rounded-lg hover:bg-[#00d4ff]/5 hover:text-white transition"
-                  >
-
-                    <i className="fa-solid fa-rotate-right mr-2"></i>
-
-                    Scan Another File
-
-                  </button>
-
-                </div>
-
-              </div>
-
-            )}
-
-          </div>
-
-        )}
+          )}
 
         {/* ================================================== */}
         {/* HISTORY */}
@@ -4421,155 +4531,155 @@ function AppContent() {
         {activeTab ===
           'history' && (
 
-          <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto">
 
-            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6">
 
-              <h2 className="text-3xl font-bold text-white">
-                Scan History
-              </h2>
+                <h2 className="text-3xl font-bold text-white">
+                  Scan History
+                </h2>
 
-              {history.length >
-                0 && (
+                {history.length >
+                  0 && (
 
-                <button
-                  onClick={async () => {
-                    if (user?.id) {
-                      try {
-                        await clearUserScanHistory(
-                          user.id
-                        );
-                      } catch (clearError) {
-                        console.warn(
-                          'Failed to clear Firestore scan history:',
-                          clearError
-                        );
-                      }
-                    }
-
-                    setHistory(
-                      []
-                    );
-                  }}
-                  className="text-xs text-red-400 hover:text-red-300 transition"
-                >
-
-                  <i className="fa-solid fa-trash mr-1"></i>
-
-                  Clear History
-
-                </button>
-
-              )}
-
-            </div>
-
-            <div className="glass-panel p-6">
-
-              {history.length ===
-              0 ? (
-
-                <p className="text-gray-400 text-center py-8">
-                  No scans yet. Start analyzing audio files!
-                </p>
-
-              ) : (
-
-                <div className="space-y-3">
-
-                  {history.map(
-                    (
-                      record
-                    ) => {
-
-                      const verdictPresentation =
-                        getVerdictPresentation(
-                          record.result
-                        );
-
-                      return (
-
-                        <div
-                          key={
-                            record.id
+                    <button
+                      onClick={async () => {
+                        if (user?.id) {
+                          try {
+                            await clearUserScanHistory(
+                              user.id
+                            );
+                          } catch (clearError) {
+                            console.warn(
+                              'Failed to clear Firestore scan history:',
+                              clearError
+                            );
                           }
-                          className="batch-item flex items-center justify-between"
-                        >
+                        }
 
-                          <div className="flex items-center gap-3">
+                        setHistory(
+                          []
+                        );
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300 transition"
+                    >
 
-                            <span
-                              className={`w-3 h-3 rounded-full ${verdictPresentation.dotClass}`}
-                            ></span>
+                      <i className="fa-solid fa-trash mr-1"></i>
 
-                            <div>
+                      Clear History
 
-                              <p className="text-white text-sm font-medium">
-                                {
-                                  record.filename
-                                }
-                              </p>
+                    </button>
 
-                              <p className="text-gray-500 text-xs">
-                                {new Date(
-                                  record.timestamp
-                                ).toLocaleString()}
-                              </p>
+                  )}
 
-                              <p
-                                className={`text-[10px] ${verdictPresentation.textClass}`}
+              </div>
+
+              <div className="glass-panel p-6">
+
+                {history.length ===
+                  0 ? (
+
+                  <p className="text-gray-400 text-center py-8">
+                    No scans yet. Start analyzing audio files!
+                  </p>
+
+                ) : (
+
+                  <div className="space-y-3">
+
+                    {history.map(
+                      (
+                        record
+                      ) => {
+
+                        const verdictPresentation =
+                          getVerdictPresentation(
+                            record.result
+                          );
+
+                        return (
+
+                          <div
+                            key={
+                              record.id
+                            }
+                            className="batch-item flex items-center justify-between"
+                          >
+
+                            <div className="flex items-center gap-3">
+
+                              <span
+                                className={`w-3 h-3 rounded-full ${verdictPresentation.dotClass}`}
+                              ></span>
+
+                              <div>
+
+                                <p className="text-white text-sm font-medium">
+                                  {
+                                    record.filename
+                                  }
+                                </p>
+
+                                <p className="text-gray-500 text-xs">
+                                  {new Date(
+                                    record.timestamp
+                                  ).toLocaleString()}
+                                </p>
+
+                                <p
+                                  className={`text-[10px] ${verdictPresentation.textClass}`}
+                                >
+                                  {
+                                    verdictPresentation.label
+                                  }
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                            <div className="flex items-center gap-4">
+
+                              <span className="text-gray-400 text-xs">
+
+                                {record.duration.toFixed(
+                                  1
+                                )}
+
+                                s
+
+                              </span>
+
+                              <span
+                                className={`text-xs font-bold ${verdictPresentation.textClass}`}
                               >
-                                {
-                                  verdictPresentation.label
-                                }
-                              </p>
+
+                                {record.result.confidence.toFixed(
+                                  0
+                                )}
+
+                                %
+
+                              </span>
 
                             </div>
 
                           </div>
 
-                          <div className="flex items-center gap-4">
+                        );
 
-                            <span className="text-gray-400 text-xs">
+                      }
+                    )}
 
-                              {record.duration.toFixed(
-                                1
-                              )}
+                  </div>
 
-                              s
+                )}
 
-                            </span>
-
-                            <span
-                              className={`text-xs font-bold ${verdictPresentation.textClass}`}
-                            >
-
-                              {record.result.confidence.toFixed(
-                                0
-                              )}
-
-                              %
-
-                            </span>
-
-                          </div>
-
-                        </div>
-
-                      );
-
-                    }
-                  )}
-
-                </div>
-
-              )}
+              </div>
 
             </div>
 
-          </div>
-
-        )}
+          )}
 
         {/* ================================================== */}
         {/* ABOUT */}
@@ -4578,70 +4688,70 @@ function AppContent() {
         {activeTab ===
           'about' && (
 
-          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-6">
 
-            <h2 className="text-3xl font-bold text-white">
-              About VoxForensics
-            </h2>
+              <h2 className="text-3xl font-bold text-white">
+                About VoxForensics
+              </h2>
 
-            <div className="glass-panel p-6 space-y-4">
+              <div className="glass-panel p-6 space-y-4">
 
-              <p className="text-gray-300 leading-relaxed">
-                VoxForensics is an academic prototype for detecting potentially synthetic or manipulated audio using acoustic features and a trained machine learning classification model.
-              </p>
+                <p className="text-gray-300 leading-relaxed">
+                  VoxForensics is an academic prototype for detecting potentially synthetic or manipulated audio using acoustic features and a trained machine learning classification model.
+                </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                <div className="feature-card">
+                  <div className="feature-card">
 
-                  <i className="fa-solid fa-shield-halved text-[#00ff88] text-2xl mb-3"></i>
+                    <i className="fa-solid fa-shield-halved text-[#00ff88] text-2xl mb-3"></i>
 
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    Audio Analysis
-                  </h3>
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                      Audio Analysis
+                    </h3>
 
-                  <p className="text-sm text-gray-400">
-                    Audio recordings are sent to the VoxForensics machine learning API, where acoustic and spectral features are extracted for classification.
-                  </p>
+                    <p className="text-sm text-gray-400">
+                      Audio recordings are sent to the VoxForensics machine learning API, where acoustic and spectral features are extracted for classification.
+                    </p>
+
+                  </div>
+
+                  <div className="feature-card">
+
+                    <i className="fa-solid fa-wave-square text-[#a855f7] text-2xl mb-3"></i>
+
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                      Machine Learning
+                    </h3>
+
+                    <p className="text-sm text-gray-400">
+                      A trained Random Forest model evaluates extracted audio features and returns real and AI-generated probability values.
+                    </p>
+
+                  </div>
 
                 </div>
 
-                <div className="feature-card">
+                <button
+                  onClick={() =>
+                    setShowTestPanel(
+                      true
+                    )
+                  }
+                  className="neon-btn neon-btn-outline mt-4"
+                >
 
-                  <i className="fa-solid fa-wave-square text-[#a855f7] text-2xl mb-3"></i>
+                  <i className="fa-solid fa-flask mr-2"></i>
 
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    Machine Learning
-                  </h3>
+                  Run E2E Tests
 
-                  <p className="text-sm text-gray-400">
-                    A trained Random Forest model evaluates extracted audio features and returns real and AI-generated probability values.
-                  </p>
-
-                </div>
+                </button>
 
               </div>
 
-              <button
-                onClick={() =>
-                  setShowTestPanel(
-                    true
-                  )
-                }
-                className="neon-btn neon-btn-outline mt-4"
-              >
-
-                <i className="fa-solid fa-flask mr-2"></i>
-
-                Run E2E Tests
-
-              </button>
-
             </div>
 
-          </div>
-
-        )}
+          )}
 
       </main>
 

@@ -1,26 +1,64 @@
 import { useState, useEffect } from 'react';
 import { User } from './AuthSystem';
+import { getUserScanHistory } from '../services/history';
+import { ScanRecord } from '../utils/analysis';
 
 export default function UserDashboard({ currentUser, onLogout, onBack }: { 
   currentUser: User; 
   onLogout: () => void;
   onBack: () => void;
 }) {
-  const [scanHistory, setScanHistory] = useState<any[]>([]);
+  const [scanHistory, setScanHistory] = useState<ScanRecord[]>([]);
   const [referrals, setReferrals] = useState<any[]>([]);
+  const is2FAEnabled = Boolean(currentUser.twoFactorEnabled);
 
   useEffect(() => {
-    const history = JSON.parse(localStorage.getItem('voxforensics_history') || '[]');
-    setScanHistory(history);
+    let isCancelled = false;
 
-    const userReferrals = JSON.parse(localStorage.getItem(`referrals_${currentUser.id}`) || '[]');
-    setReferrals(userReferrals);
+    // Immediately clear previous scan history to avoid cross-account data lingering
+    setScanHistory([]);
+
+    // Query scans strictly belonging to this authenticated user
+    getUserScanHistory(currentUser.id)
+      .then((records) => {
+        if (!isCancelled) {
+          // Extra safety check: ensure record belongs to this currentUser.id
+          const userRecords = records.filter(
+            (s) => !s.userId || s.userId === currentUser.id
+          );
+          setScanHistory(userRecords);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load user scan history for dashboard:', error);
+        if (!isCancelled) {
+          setScanHistory([]);
+        }
+      });
+
+    // Referrals namespaced by user ID
+    try {
+      const userReferrals = JSON.parse(
+        localStorage.getItem(`referrals_${currentUser.id}`) || '[]'
+      );
+      setReferrals(userReferrals);
+    } catch {
+      setReferrals([]);
+    }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [currentUser.id]);
 
   const copyReferralCode = () => {
     navigator.clipboard.writeText(currentUser.referralCode);
     alert('Referral code copied to clipboard!');
   };
+
+  const deepfakesCount = scanHistory.filter(
+    (s) => s.result?.isDeepfake || s.result?.verdict === 'AI-Generated'
+  ).length;
 
   return (
     <div className="min-h-screen" style={{ background: '#030712' }}>
@@ -71,7 +109,7 @@ export default function UserDashboard({ currentUser, onLogout, onBack }: {
           <div className="glass-card p-6">
             <p className="text-xs text-gray-400 mb-1">Deepfakes Detected</p>
             <p className="text-3xl font-bold text-red-400">
-              {scanHistory.filter(s => s.result?.isDeepfake).length}
+              {deepfakesCount}
             </p>
             <p className="text-xs text-gray-500 mt-2">AI-generated audio found</p>
           </div>
@@ -119,16 +157,18 @@ export default function UserDashboard({ currentUser, onLogout, onBack }: {
               <div>
                 <p className="text-sm font-medium text-white">Two-Factor Authentication</p>
                 <p className="text-xs text-gray-400">
-                  {currentUser.twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                  {is2FAEnabled ? 'Enabled' : 'Disabled'}
                 </p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs ${
-                currentUser.twoFactorEnabled 
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
-                  : 'bg-red-500/20 text-red-300 border border-red-500/30'
-              }`}>
-                {currentUser.twoFactorEnabled ? '✅ Active' : '❌ Inactive'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`px-3 py-1 rounded-full text-xs ${
+                  is2FAEnabled 
+                    ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                    : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                }`}>
+                  {is2FAEnabled ? '✅ Active (Email 2FA)' : '❌ Inactive'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -142,31 +182,42 @@ export default function UserDashboard({ currentUser, onLogout, onBack }: {
             </p>
           ) : (
             <div className="space-y-3">
-              {scanHistory.slice(0, 5).map((scan, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-3 h-3 rounded-full ${
-                      scan.result?.isDeepfake ? 'bg-red-500' : 'bg-green-500'
-                    }`}></span>
-                    <div>
-                      <p className="text-sm font-medium text-white">{scan.filename}</p>
+              {scanHistory.slice(0, 5).map((scan, idx) => {
+                const isDeepfake =
+                  scan.result?.isDeepfake ??
+                  scan.result?.verdict === 'AI-Generated';
+                const confidenceVal = scan.result?.confidence ?? 0;
+                const displayConfidence =
+                  confidenceVal <= 1
+                    ? (confidenceVal * 100).toFixed(1)
+                    : confidenceVal.toFixed(1);
+
+                return (
+                  <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-3 h-3 rounded-full ${
+                        isDeepfake ? 'bg-red-500' : 'bg-green-500'
+                      }`}></span>
+                      <div>
+                        <p className="text-sm font-medium text-white">{scan.filename}</p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(scan.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-bold ${
+                        isDeepfake ? 'text-red-400' : 'text-green-400'
+                      }`}>
+                        {isDeepfake ? 'Deepfake' : 'Real'}
+                      </p>
                       <p className="text-xs text-gray-400">
-                        {new Date(scan.timestamp).toLocaleString()}
+                        {displayConfidence}% confidence
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${
-                      scan.result?.isDeepfake ? 'text-red-400' : 'text-green-400'
-                    }`}>
-                      {scan.result?.isDeepfake ? 'Deepfake' : 'Real'}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {((scan.result?.confidence || 0) * 100).toFixed(1)}% confidence
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

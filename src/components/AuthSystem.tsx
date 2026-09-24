@@ -15,13 +15,7 @@ import {
   signOut,
   updateProfile,
   sendEmailVerification,
-  multiFactor,
-  RecaptchaVerifier,
-  PhoneAuthProvider,
-  PhoneMultiFactorGenerator,
-  getMultiFactorResolver,
   type User as FirebaseUser,
-  type MultiFactorResolver,
 } from 'firebase/auth';
 
 import {
@@ -32,6 +26,11 @@ import {
 } from 'firebase/firestore';
 
 import { auth, db } from '../firebase';
+import {
+  sendEmailOtp,
+  verifyEmailOtp,
+  clearEmailOtpSession,
+} from '../services/emailOtp';
 
 /* ============================================================
  * TYPES
@@ -79,8 +78,7 @@ type AuthMode = 'login' | 'register';
 type AuthStep =
   | 'credentials'
   | 'verify-email'
-  | 'phone'
-  | 'otp';
+  | 'email-otp';
 
 /* ============================================================
  * CONTEXT
@@ -143,6 +141,23 @@ function firebaseUserToProfile(
   firebaseUser: FirebaseUser,
   data: any
 ): User {
+  const isAdminAccount =
+    data?.role === 'admin' ||
+    firebaseUser.email?.toLowerCase() === 'admin@voxforensics.com';
+
+  let createdAtStr = new Date().toISOString();
+  if (data?.createdAt) {
+    if (typeof data.createdAt.toDate === 'function') {
+      createdAtStr = data.createdAt.toDate().toISOString();
+    } else if (typeof data.createdAt === 'string') {
+      createdAtStr = data.createdAt;
+    } else if (data.createdAt instanceof Date) {
+      createdAtStr = data.createdAt.toISOString();
+    } else if (typeof data.createdAt === 'number') {
+      createdAtStr = new Date(data.createdAt).toISOString();
+    }
+  }
+
   return {
     id: firebaseUser.uid,
 
@@ -153,6 +168,7 @@ function firebaseUserToProfile(
 
     name:
       data?.name ||
+      data?.username ||
       firebaseUser.displayName ||
       'VoxForensics User',
 
@@ -161,7 +177,7 @@ function firebaseUserToProfile(
       '',
 
     role:
-      data?.role === 'admin'
+      isAdminAccount
         ? 'admin'
         : 'user',
 
@@ -173,13 +189,9 @@ function firebaseUserToProfile(
       data?.referredBy ||
       undefined,
 
-    createdAt:
-      typeof data?.createdAt === 'string'
-        ? data.createdAt
-        : new Date().toISOString(),
+    createdAt: createdAtStr,
 
-    twoFactorEnabled:
-      Boolean(data?.twoFactorEnabled),
+    twoFactorEnabled: Boolean(data?.twoFactorEnabled),
   };
 }
 
@@ -220,34 +232,30 @@ export function AuthProvider({
         await getDoc(userRef);
 
       if (snapshot.exists()) {
-        return firebaseUserToProfile(
+        const data = snapshot.data();
+        const profile = firebaseUserToProfile(
           firebaseUser,
-          snapshot.data()
+          data
         );
-      }
 
-      const enrolledFactors =
-        multiFactor(firebaseUser).enrolledFactors;
-
-      const hasMFA =
-        mfaVerified ||
-        enrolledFactors.length > 0;
-
-      let phoneNumber = '';
-
-      if (enrolledFactors.length > 0) {
-        const phoneFactor =
-          enrolledFactors.find(
-            (factor: any) =>
-              factor.factorId ===
-              PhoneMultiFactorGenerator.FACTOR_ID
-          );
-
-        if (phoneFactor) {
-          phoneNumber =
-            phoneFactor.phoneNumber ||
-            '';
+        if (mfaVerified) {
+          profile.twoFactorEnabled = true;
         }
+
+        // Ensure admin account always has admin role in Firestore so firestore.rules isAdmin() works
+        if (
+          firebaseUser.email?.toLowerCase() === 'admin@voxforensics.com' &&
+          data?.role !== 'admin'
+        ) {
+          await setDoc(
+            userRef,
+            { role: 'admin' },
+            { merge: true }
+          ).catch((e) => console.warn('Could not update admin role in Firestore:', e));
+          profile.role = 'admin';
+        }
+
+        return profile;
       }
 
       const name =
@@ -257,27 +265,21 @@ export function AuthProvider({
       const referralCode =
         generateReferralCode();
 
+      const isAdminAccount =
+        firebaseUser.email?.toLowerCase() === 'admin@voxforensics.com';
+
       const recoveryProfile = {
+        id: firebaseUser.uid,
+        uid: firebaseUser.uid,
         username: name,
-
         name,
-
-        email:
-          firebaseUser.email || '',
-
-        phoneNumber,
-
-        role: 'user',
-
+        email: firebaseUser.email || '',
+        phoneNumber: '',
+        role: isAdminAccount ? 'admin' : 'user',
         referralCode,
-
         referredBy: null,
-
-        createdAt:
-          serverTimestamp(),
-
-        twoFactorEnabled:
-          hasMFA,
+        createdAt: serverTimestamp(),
+        twoFactorEnabled: mfaVerified,
       };
 
       await setDoc(
@@ -290,26 +292,14 @@ export function AuthProvider({
 
       return {
         id: firebaseUser.uid,
-
-        email:
-          firebaseUser.email || '',
-
+        email: firebaseUser.email || '',
         name,
-
-        phoneNumber,
-
-        role: 'user',
-
+        phoneNumber: '',
+        role: isAdminAccount ? 'admin' : 'user',
         referralCode,
-
-        referredBy:
-          undefined,
-
-        createdAt:
-          new Date().toISOString(),
-
-        twoFactorEnabled:
-          hasMFA,
+        referredBy: undefined,
+        createdAt: new Date().toISOString(),
+        twoFactorEnabled: mfaVerified,
       };
     } catch (error) {
       console.error(
@@ -322,7 +312,7 @@ export function AuthProvider({
   }
 
   /* ----------------------------------------------------------
-   * FIREBASE AUTH STATE
+   * FIREBASE AUTH STATE (CLEAN ON-STARTUP RESTORATION)
    * ---------------------------------------------------------- */
 
   useEffect(() => {
@@ -360,8 +350,7 @@ export function AuthProvider({
             }
 
             /*
-             * Regular users preserve existing email verification
-             * and MFA requirements.
+             * Regular users require verified email.
              */
             if (!firebaseUser.emailVerified) {
               setCurrentUser(null);
@@ -369,22 +358,21 @@ export function AuthProvider({
               return;
             }
 
-            const enrolledFactors =
-              multiFactor(firebaseUser).enrolledFactors;
-
-            if (mfaJustCompletedRef.current) {
+            /*
+             * If 2FA was completed or profile already has twoFactorEnabled: true,
+             * restore the application dashboard session.
+             */
+            if (mfaJustCompletedRef.current || profile.twoFactorEnabled) {
               setCurrentUser(profile);
               setAuthLoading(false);
               return;
             }
 
-            if (profile.twoFactorEnabled && enrolledFactors.length === 0) {
-              setCurrentUser(null);
-              setAuthLoading(false);
-              return;
-            }
-
-            setCurrentUser(profile);
+            /*
+             * User has not completed application 2FA:
+             * Do not auto-log in to dashboard.
+             */
+            setCurrentUser(null);
           } catch (error) {
             console.error(
               'Auth state error:',
@@ -485,25 +473,24 @@ export function AuthProvider({
     password: string
   ): Promise<boolean> {
     try {
-      await signInWithEmailAndPassword(
+      const cred = await signInWithEmailAndPassword(
         auth,
         email.trim(),
         password
       );
 
-      return true;
-    } catch (error: any) {
-      /*
-       * MFA-required is intentionally re-thrown
-       * so AuthSystem can create the resolver.
-       */
-      if (
-        error?.code ===
-        'auth/multi-factor-auth-required'
-      ) {
-        throw error;
+      if (!cred.user.emailVerified) {
+        const snap = await getDoc(doc(db, 'users', cred.user.uid)).catch(() => null);
+        if (
+          snap?.data()?.role !== 'admin' &&
+          cred.user.email?.toLowerCase() !== 'admin@voxforensics.com'
+        ) {
+          throw new Error('auth/unverified-email');
+        }
       }
 
+      return true;
+    } catch (error: any) {
       throw error;
     }
   }
@@ -520,10 +507,9 @@ export function AuthProvider({
     referredBy?: string
   ): Promise<boolean> {
     try {
-      const normalizedPhone =
-        normalizePhoneNumber(
-          phoneNumber
-        );
+      const normalizedPhone = phoneNumber.trim()
+        ? normalizePhoneNumber(phoneNumber)
+        : '';
 
       const credential =
         await createUserWithEmailAndPassword(
@@ -557,6 +543,8 @@ export function AuthProvider({
           firebaseUser.uid
         ),
         {
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
           username:
             name.trim(),
 
@@ -584,8 +572,6 @@ export function AuthProvider({
             false,
         }
       );
-
-      await signOut(auth);
 
       setCurrentUser(null);
 
@@ -639,7 +625,7 @@ export function AuthProvider({
 }
 
 /* ============================================================
- * FIREBASE ERROR MESSAGES
+ * ERROR MESSAGES
  * ============================================================ */
 
 function getFirebaseErrorMessage(
@@ -649,6 +635,9 @@ function getFirebaseErrorMessage(
     error?.code || '';
 
   switch (code) {
+    case 'auth/unverified-email':
+      return 'Please verify your email address before logging in.';
+
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
       return 'Invalid email or password.';
@@ -657,7 +646,7 @@ function getFirebaseErrorMessage(
       return 'No account was found with this email.';
 
     case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
+      return 'An account with this email already exists. Please log in below.';
 
     case 'auth/weak-password':
       return 'Password must be at least 6 characters long.';
@@ -668,41 +657,8 @@ function getFirebaseErrorMessage(
     case 'auth/too-many-requests':
       return 'Too many attempts. Please try again later.';
 
-    case 'auth/invalid-phone-number':
-      return 'Please enter a valid phone number.';
-
-    case 'auth/missing-phone-number':
-      return 'Please enter your phone number.';
-
-    case 'auth/quota-exceeded':
-      return 'SMS quota exceeded. Please try again later.';
-
-    case 'auth/code-expired':
-      return 'The verification code has expired. Please request a new one.';
-
-    case 'auth/invalid-verification-code':
-      return 'The verification code is incorrect.';
-
-    case 'auth/session-expired':
-      return 'Your verification session has expired. Please try again.';
-
-    case 'auth/invalid-app-credential':
-      return 'The reCAPTCHA verification failed. Please complete the reCAPTCHA again.';
-
-    case 'auth/billing-not-enabled':
-      return 'Firebase billing is not enabled for this project.';
-
-    case 'auth/multi-factor-auth-required':
-      return 'Two-factor authentication is required.';
-
-    case 'auth/requires-recent-login':
-      return 'Please sign in again and try this operation.';
-
     case 'permission-denied':
       return 'You do not have permission to perform this operation.';
-
-    case 'auth/operation-not-allowed':
-      return 'This authentication method is not enabled in Firebase.';
 
     default:
       return (
@@ -713,12 +669,13 @@ function getFirebaseErrorMessage(
 }
 
 /* ============================================================
- * AUTH SYSTEM UI
+ * AUTH SYSTEM COMPONENT
  * ============================================================ */
 
 export default function AuthSystem() {
   const {
     user,
+    authLoading,
     login,
     completeLogin,
     register,
@@ -726,7 +683,7 @@ export default function AuthSystem() {
   } = useAuth();
 
   /* ----------------------------------------------------------
-   * STATE
+   * CLEAN INITIAL STATE (ALWAYS STARTS ON CREDENTIALS/LOGIN)
    * ---------------------------------------------------------- */
 
   const [mode, setMode] =
@@ -765,66 +722,13 @@ export default function AuthSystem() {
   const [resendCooldown, setResendCooldown] =
     useState(0);
 
-  const [verificationId, setVerificationId] =
-    useState('');
-
   const [pendingFirebaseUser, setPendingFirebaseUser] =
     useState<FirebaseUser | null>(null);
-
-  const [mfaResolver, setMfaResolver] =
-    useState<MultiFactorResolver | null>(
-      null
-    );
-
-  /*
-   * IMPORTANT:
-   * This controls whether the reCAPTCHA container
-   * is actually visible.
-   *
-   * Previously it was always visible whenever
-   * step === 'otp', which caused the reCAPTCHA
-   * to remain on screen after successful verification.
-   */
-  const [showRecaptcha, setShowRecaptcha] =
-    useState(false);
-
-  /* ----------------------------------------------------------
-   * REFS
-   * ---------------------------------------------------------- */
-
-  const verificationIdRef =
-    useRef('');
 
   const pendingFirebaseUserRef =
     useRef<FirebaseUser | null>(
       null
     );
-
-  const mfaResolverRef =
-    useRef<MultiFactorResolver | null>(
-      null
-    );
-
-  const recaptchaVerifierRef =
-    useRef<RecaptchaVerifier | null>(
-      null
-    );
-
-  const smsRequestInProgressRef =
-    useRef(false);
-
-  /* ----------------------------------------------------------
-   * STATE SYNC HELPERS
-   * ---------------------------------------------------------- */
-
-  const updateVerificationId = (
-    id: string
-  ) => {
-    verificationIdRef.current =
-      id;
-
-    setVerificationId(id);
-  };
 
   const updatePendingFirebaseUser = (
     firebaseUser: FirebaseUser | null
@@ -835,15 +739,6 @@ export default function AuthSystem() {
     setPendingFirebaseUser(
       firebaseUser
     );
-  };
-
-  const updateMfaResolver = (
-    resolver: MultiFactorResolver | null
-  ) => {
-    mfaResolverRef.current =
-      resolver;
-
-    setMfaResolver(resolver);
   };
 
   /* ----------------------------------------------------------
@@ -870,398 +765,28 @@ export default function AuthSystem() {
   }, [resendCooldown]);
 
   /* ----------------------------------------------------------
-   * CLEANUP RECAPTCHA
-   *
-   * THIS IS THE MAIN FIX.
+   * SIGN OUT FROM ANY AUTH STATE
    * ---------------------------------------------------------- */
 
-  const clearRecaptcha = () => {
+  const handleSignOut = async () => {
+    setError('');
+    setMessage('');
+    setOtp('');
+    clearEmailOtpSession(pendingFirebaseUser?.uid);
+    updatePendingFirebaseUser(null);
+    setMode('login');
+    setStep('credentials');
+    setEmail('');
+    setPassword('');
+
     try {
-      if (
-        recaptchaVerifierRef.current
-      ) {
-        recaptchaVerifierRef.current.clear();
-      }
-    } catch (error) {
-      console.warn(
-        'Could not clear reCAPTCHA:',
-        error
-      );
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Sign out error:', e);
     }
 
-    recaptchaVerifierRef.current =
-      null;
-
-    const container =
-      document.getElementById(
-        'voxforensics-recaptcha-container'
-      );
-
-    if (container) {
-      container.innerHTML = '';
-    }
-
-    setShowRecaptcha(false);
+    logout();
   };
-
-  /*
-   * Clean up any active reCAPTCHA widget on unmount.
-   */
-  useEffect(() => {
-    return () => {
-      clearRecaptcha();
-    };
-  }, []);
-
-  /* ----------------------------------------------------------
-   * CREATE RECAPTCHA
-   * ---------------------------------------------------------- */
-
-  const createRecaptcha =
-    async () => {
-      /*
-       * Clean up any existing verifier instance
-       * before creating a fresh one to prevent
-       * duplicate widget or expired token errors.
-       */
-      if (
-        recaptchaVerifierRef.current
-      ) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch (error) {
-          console.warn(
-            'Could not clear previous reCAPTCHA:',
-            error
-          );
-        }
-
-        recaptchaVerifierRef.current =
-          null;
-      }
-
-      const container =
-        document.getElementById(
-          'voxforensics-recaptcha-container'
-        );
-
-      if (!container) {
-        throw new Error(
-          'reCAPTCHA container was not found.'
-        );
-      }
-
-      /*
-       * Wait for DOM paint before initializing
-       * the Firebase reCAPTCHA instance.
-       */
-      await new Promise<void>(
-        (resolve) => {
-          window.requestAnimationFrame(
-            () => resolve()
-          );
-        }
-      );
-
-      /*
-       * Make sure the container is empty
-       * before rendering a new Firebase widget.
-       */
-      container.innerHTML = '';
-
-      const verifier =
-        new RecaptchaVerifier(
-          auth,
-          'voxforensics-recaptcha-container',
-          {
-            size: 'invisible',
-
-            callback: () => {
-              console.log(
-                'Invisible reCAPTCHA completed.'
-              );
-            },
-
-            'expired-callback': () => {
-              console.log(
-                'reCAPTCHA expired.'
-              );
-
-              clearRecaptcha();
-
-              setError(
-                'reCAPTCHA verification expired. Please request a new code.'
-              );
-            },
-
-            'error-callback': (err: any) => {
-              console.error(
-                'reCAPTCHA error:',
-                err
-              );
-
-              clearRecaptcha();
-
-              setError(
-                'reCAPTCHA verification failed. Please try again.'
-              );
-            },
-          }
-        );
-
-      recaptchaVerifierRef.current =
-        verifier;
-
-      await verifier.render();
-
-      console.log(
-        'Invisible reCAPTCHA rendered successfully.'
-      );
-
-      return verifier;
-    };
-
-  /* ----------------------------------------------------------
-   * SEND MFA LOGIN CODE
-   * ---------------------------------------------------------- */
-
-  const sendMfaLoginCode =
-    async (
-      resolver: MultiFactorResolver
-    ) => {
-      if (
-        smsRequestInProgressRef.current
-      ) {
-        return;
-      }
-
-      const phoneHint =
-        resolver.hints.find(
-          (hint: any) =>
-            hint.factorId ===
-            PhoneMultiFactorGenerator.FACTOR_ID
-        );
-
-      if (!phoneHint) {
-        setError(
-          'No phone-based two-factor authentication method was found.'
-        );
-
-        return;
-      }
-
-      smsRequestInProgressRef.current =
-        true;
-
-      setLoading(true);
-      setError('');
-      setMessage('');
-
-      try {
-        /*
-         * Show OTP page and reCAPTCHA.
-         */
-        setStep('otp');
-        setShowRecaptcha(true);
-
-        await new Promise<void>(
-          (resolve) => {
-            window.requestAnimationFrame(
-              () => resolve()
-            );
-          }
-        );
-
-        const verifier =
-          await createRecaptcha();
-
-        const provider =
-          new PhoneAuthProvider(
-            auth
-          );
-
-        const id =
-          await provider.verifyPhoneNumber(
-            {
-              multiFactorHint:
-                phoneHint,
-              session:
-                resolver.session,
-            },
-            verifier
-          );
-
-        /*
-         * IMPORTANT:
-         *
-         * verifyPhoneNumber() only resolves after
-         * Firebase has accepted the reCAPTCHA
-         * and successfully requested the SMS.
-         *
-         * Therefore it is now safe to destroy
-         * the reCAPTCHA widget.
-         */
-        updateVerificationId(id);
-
-        clearRecaptcha();
-
-        setOtp('');
-
-        setResendCooldown(30);
-
-        setMessage(
-          'Verification code sent to your registered phone number.'
-        );
-      } catch (error: any) {
-        console.error(
-          'MFA SMS error:',
-          error
-        );
-
-        setError(
-          getFirebaseErrorMessage(
-            error
-          )
-        );
-
-        clearRecaptcha();
-      } finally {
-        smsRequestInProgressRef.current =
-          false;
-
-        setLoading(false);
-      }
-    };
-
-  /* ----------------------------------------------------------
-   * SEND FIRST-TIME MFA ENROLLMENT CODE
-   * ---------------------------------------------------------- */
-
-  const handleSendEnrollmentCode =
-    async () => {
-      setError('');
-      setMessage('');
-
-      if (!phoneNumber.trim()) {
-        setError(
-          'Please enter your phone number.'
-        );
-
-        return;
-      }
-
-      const firebaseUser =
-        pendingFirebaseUserRef.current ||
-        pendingFirebaseUser;
-
-      if (!firebaseUser) {
-        setError(
-          'Your registration session has expired. Please register again.'
-        );
-
-        return;
-      }
-
-      if (
-        !firebaseUser.emailVerified
-      ) {
-        setError(
-          'Please verify your email before enabling two-factor authentication.'
-        );
-
-        return;
-      }
-
-      if (
-        smsRequestInProgressRef.current
-      ) {
-        return;
-      }
-
-      smsRequestInProgressRef.current =
-        true;
-
-      setLoading(true);
-
-      try {
-        const normalizedPhone =
-          normalizePhoneNumber(
-            phoneNumber
-          );
-
-        /*
-         * Show OTP screen and reCAPTCHA.
-         */
-        setStep('otp');
-        setShowRecaptcha(true);
-
-        await new Promise<void>(
-          (resolve) => {
-            window.requestAnimationFrame(
-              () => resolve()
-            );
-          }
-        );
-
-        const verifier =
-          await createRecaptcha();
-
-        const session =
-          await multiFactor(
-            firebaseUser
-          ).getSession();
-
-        const provider =
-          new PhoneAuthProvider(
-            auth
-          );
-
-        const id =
-          await provider.verifyPhoneNumber(
-            {
-              phoneNumber:
-                normalizedPhone,
-              session,
-            },
-            verifier
-          );
-
-        updateVerificationId(id);
-
-        /*
-         * MAIN FIX:
-         * Remove the reCAPTCHA immediately
-         * after Firebase successfully sends SMS.
-         */
-        clearRecaptcha();
-
-        setOtp('');
-
-        setResendCooldown(30);
-
-        setMessage(
-          'Verification code sent to your phone number.'
-        );
-      } catch (error: any) {
-        console.error(
-          'Enrollment SMS error:',
-          error
-        );
-
-        setError(
-          getFirebaseErrorMessage(
-            error
-          )
-        );
-
-        clearRecaptcha();
-      } finally {
-        smsRequestInProgressRef.current =
-          false;
-
-        setLoading(false);
-      }
-    };
 
   /* ----------------------------------------------------------
    * LOGIN / REGISTER SUBMIT
@@ -1303,86 +828,108 @@ export default function AuthSystem() {
         return;
       }
 
-      if (
-        mode === 'register' &&
-        !phoneNumber.trim()
-      ) {
-        setError(
-          'Please enter your phone number.'
-        );
-
-        return;
-      }
-
       setLoading(true);
 
       try {
         if (mode === 'register') {
-          await register(
-            email,
-            password,
-            name,
-            phoneNumber,
-            referralCode
-          );
-
-          setStep(
-            'verify-email'
-          );
-
-          setMessage(
-            'Account created successfully. Please verify your email address.'
-          );
-
-          return;
-        }
-
-        /*
-         * LOGIN
-         */
-        try {
-          await login(
-            email,
-            password
-          );
-
-          /*
-           * The auth state listener will
-           * finish normal login if applicable.
-           */
-        } catch (authError: any) {
-          if (
-            authError?.code ===
-            'auth/multi-factor-auth-required'
-          ) {
-            const resolver =
-              getMultiFactorResolver(
-                auth,
-                authError
-              );
-
-            updateMfaResolver(
-              resolver
+          try {
+            await register(
+              email,
+              password,
+              name,
+              phoneNumber,
+              referralCode
             );
 
-            await sendMfaLoginCode(
-              resolver
+            updatePendingFirebaseUser(
+              auth.currentUser
+            );
+
+            setStep(
+              'verify-email'
+            );
+
+            setMessage(
+              "We've sent a verification email to your address. Please verify your email to continue."
             );
 
             return;
+          } catch (regErr: any) {
+            if (regErr?.code === 'auth/email-already-in-use') {
+              setError(
+                'An account with this email already exists. Please log in below.'
+              );
+              setMode('login');
+              setStep('credentials');
+              setMessage('Please enter your password to log in.');
+              return;
+            }
+            throw regErr;
           }
-
-          throw authError;
         }
-      } catch (error: any) {
+
+        /*
+         * LOGIN FLOW
+         */
+        await login(
+          email,
+          password
+        );
+
+        const fbUser = auth.currentUser;
+        if (!fbUser) {
+          throw new Error('No authenticated user returned.');
+        }
+
+        await fbUser.reload();
+        const refreshedUser = auth.currentUser || fbUser;
+
+        // Step A: Check email verification
+        if (!refreshedUser.emailVerified) {
+          updatePendingFirebaseUser(refreshedUser);
+          setStep('verify-email');
+          setMessage('Please verify your email before continuing.');
+          return;
+        }
+
+        // Step B: Check admin role
+        const snap = await getDoc(doc(db, 'users', refreshedUser.uid)).catch(() => null);
+        const userData = snap?.data();
+        const isAdmin =
+          userData?.role === 'admin' ||
+          refreshedUser.email?.toLowerCase() === 'admin@voxforensics.com';
+
+        if (isAdmin) {
+          await completeLogin(refreshedUser, true);
+          return;
+        }
+
+        // Step C: Regular verified user -> Send application-level Email OTP
+        updatePendingFirebaseUser(refreshedUser);
+        const targetEmail = refreshedUser.email || email;
+        const otpRes = await sendEmailOtp(refreshedUser.uid, targetEmail);
+
+        if (!otpRes.success) {
+          setError(
+            otpRes.error ||
+            "We couldn't send the verification code. Please try again."
+          );
+          return;
+        }
+
+        setResendCooldown(otpRes.cooldownSeconds || 30);
+        setStep('email-otp');
+        setOtp('');
+        setMessage(`A 6-digit verification code has been sent to ${targetEmail}.`);
+      } catch (authError: any) {
         console.error(
           'Authentication error:',
-          error
+          authError
         );
 
         setError(
           getFirebaseErrorMessage(
-            error
+            authError
           )
         );
       } finally {
@@ -1391,7 +938,7 @@ export default function AuthSystem() {
     };
 
   /* ----------------------------------------------------------
-   * VERIFY EMAIL
+   * EMAIL VERIFIED HANDLER
    * ---------------------------------------------------------- */
 
   const handleEmailVerified =
@@ -1400,13 +947,16 @@ export default function AuthSystem() {
       setMessage('');
 
       const firebaseUser =
-        auth.currentUser;
+        auth.currentUser ||
+        pendingFirebaseUserRef.current ||
+        pendingFirebaseUser;
 
       if (!firebaseUser) {
         setError(
-          'Your registration session has expired. Please register again.'
+          'Your registration session has expired. Please log in again.'
         );
-
+        setMode('login');
+        setStep('credentials');
         return;
       }
 
@@ -1416,7 +966,8 @@ export default function AuthSystem() {
         await firebaseUser.reload();
 
         const refreshedUser =
-          auth.currentUser;
+          auth.currentUser ||
+          firebaseUser;
 
         if (
           !refreshedUser?.emailVerified
@@ -1428,14 +979,23 @@ export default function AuthSystem() {
           return;
         }
 
-        updatePendingFirebaseUser(
-          refreshedUser
-        );
+        updatePendingFirebaseUser(refreshedUser);
+        const targetEmail = refreshedUser.email || email;
+        const otpRes = await sendEmailOtp(refreshedUser.uid, targetEmail);
 
-        setStep('phone');
+        if (!otpRes.success) {
+          setError(
+            otpRes.error ||
+            "We couldn't send the verification code. Please try again."
+          );
+          return;
+        }
 
+        setResendCooldown(otpRes.cooldownSeconds || 30);
+        setStep('email-otp');
+        setOtp('');
         setMessage(
-          'Email verified. Now enable two-factor authentication.'
+          `Email verified! A 6-digit verification code has been sent to ${targetEmail} to complete Two-Factor Authentication.`
         );
       } catch (error: any) {
         setError(
@@ -1449,7 +1009,7 @@ export default function AuthSystem() {
     };
 
   /* ----------------------------------------------------------
-   * RESEND EMAIL
+   * RESEND EMAIL VERIFICATION
    * ---------------------------------------------------------- */
 
   const handleResendEmail =
@@ -1458,13 +1018,16 @@ export default function AuthSystem() {
       setMessage('');
 
       const firebaseUser =
-        auth.currentUser;
+        auth.currentUser ||
+        pendingFirebaseUserRef.current ||
+        pendingFirebaseUser;
 
       if (!firebaseUser) {
         setError(
-          'Your registration session has expired.'
+          'Your registration session has expired. Please log in again.'
         );
-
+        setMode('login');
+        setStep('credentials');
         return;
       }
 
@@ -1474,7 +1037,7 @@ export default function AuthSystem() {
         );
 
         setMessage(
-          'Verification email sent again.'
+          'Verification email sent again. Please check your inbox.'
         );
       } catch (error: any) {
         setError(
@@ -1486,197 +1049,74 @@ export default function AuthSystem() {
     };
 
   /* ----------------------------------------------------------
-   * VERIFY OTP
+   * VERIFY EMAIL OTP
    * ---------------------------------------------------------- */
 
-  const handleVerifyEnrollment =
+  const handleVerifyEmailOtp =
     async () => {
       setError('');
       setMessage('');
 
-      if (!otp.trim()) {
+      if (!otp.trim() || otp.trim().length !== 6) {
         setError(
-          'Please enter the verification code.'
+          'Please enter the 6-digit verification code.'
         );
-
         return;
       }
 
-      const id =
-        verificationIdRef.current ||
-        verificationId;
+      const firebaseUser =
+        auth.currentUser ||
+        pendingFirebaseUserRef.current ||
+        pendingFirebaseUser;
 
-      if (!id) {
+      if (!firebaseUser) {
         setError(
-          'Verification session not found. Please request a new code.'
+          'Verification session not found. Please log in again.'
         );
-
+        setMode('login');
+        setStep('credentials');
         return;
       }
 
       setLoading(true);
 
       try {
-        const credential =
-          PhoneAuthProvider.credential(
-            id,
-            otp.trim()
-          );
+        const verifyRes = await verifyEmailOtp(
+          firebaseUser.uid,
+          otp
+        );
 
-        const assertion =
-          PhoneMultiFactorGenerator.assertion(
-            credential
-          );
-
-        const currentResolver =
-          mfaResolverRef.current ||
-          mfaResolver;
-
-        const firebaseUser =
-          pendingFirebaseUserRef.current ||
-          pendingFirebaseUser;
-
-        /*
-         * ----------------------------------------------------
-         * FIRST-TIME MFA ENROLLMENT
-         * ----------------------------------------------------
-         */
-
-        if (
-          firebaseUser &&
-          !currentResolver
-        ) {
-          await multiFactor(
-            firebaseUser
-          ).enroll(
-            assertion,
-            'VoxForensics Phone'
-          );
-
-          const normalizedPhone =
-            normalizePhoneNumber(
-              phoneNumber
-            );
-
-          await setDoc(
-            doc(
-              db,
-              'users',
-              firebaseUser.uid
-            ),
-            {
-              phoneNumber:
-                normalizedPhone,
-
-              twoFactorEnabled:
-                true,
-            },
-            {
-              merge: true,
-            }
-          );
-
-          await signOut(auth);
-
-          clearRecaptcha();
-
-          updateMfaResolver(null);
-
-          updateVerificationId('');
-
-          updatePendingFirebaseUser(
-            null
-          );
-
-          setOtp('');
-
-          setResendCooldown(0);
-
-          setStep(
-            'credentials'
-          );
-
-          setMode('login');
-
-          setMessage(
-            'Two-factor authentication enabled successfully. Please log in.'
-          );
-
-          return;
-        }
-
-        /*
-         * ----------------------------------------------------
-         * MFA LOGIN
-         * ----------------------------------------------------
-         */
-
-        if (!currentResolver) {
+        if (!verifyRes.success) {
           setError(
-            'Two-factor authentication session was not found. Please log in again.'
+            verifyRes.error || 'Incorrect verification code.'
           );
-
           return;
         }
 
-        const signedInCredential =
-          await currentResolver.resolveSignIn(
-            assertion
-          );
-
-        const signedInUser =
-          signedInCredential.user;
-
-        console.log(
-          'Firebase user after MFA:',
-          signedInUser.uid
+        // Update Firestore twoFactorEnabled ONLY after successful email OTP verification
+        await setDoc(
+          doc(
+            db,
+            'users',
+            firebaseUser.uid
+          ),
+          {
+            twoFactorEnabled: true,
+          },
+          {
+            merge: true,
+          }
         );
 
-        console.log(
-          'MFA factors:',
-          signedInUser.multiFactor
-            ?.enrolledFactors?.length
-        );
-
-        const success =
-          await completeLogin(
-            signedInUser,
-            true
-          );
-
-        if (!success) {
-          setError(
-            'Login could not be completed. Please try again.'
-          );
-
-          await signOut(auth);
-
-          return;
-        }
-
-        /*
-         * Clean everything immediately after
-         * successful MFA authentication.
-         */
-        clearRecaptcha();
-
-        updateMfaResolver(null);
-
-        updateVerificationId('');
-
-        updatePendingFirebaseUser(
-          null
-        );
-
+        clearEmailOtpSession(firebaseUser.uid);
         setOtp('');
-
         setResendCooldown(0);
+        updatePendingFirebaseUser(null);
 
-        setStep(
-          'credentials'
+        await completeLogin(
+          firebaseUser,
+          true
         );
-
-        setMessage('');
       } catch (error: any) {
         console.error(
           'OTP verification error:',
@@ -1684,9 +1124,7 @@ export default function AuthSystem() {
         );
 
         setError(
-          getFirebaseErrorMessage(
-            error
-          )
+          error?.message || 'Verification failed. Please try again.'
         );
       } finally {
         setLoading(false);
@@ -1694,196 +1132,50 @@ export default function AuthSystem() {
     };
 
   /* ----------------------------------------------------------
-   * RESEND OTP
+   * RESEND EMAIL OTP
    * ---------------------------------------------------------- */
 
-  const handleResendCode =
+  const handleResendEmailOtp =
     async () => {
       if (resendCooldown > 0) {
         return;
       }
 
-      if (
-        smsRequestInProgressRef.current
-      ) {
-        return;
-      }
-
-      const currentResolver =
-        mfaResolverRef.current ||
-        mfaResolver;
-
       const firebaseUser =
+        auth.currentUser ||
         pendingFirebaseUserRef.current ||
         pendingFirebaseUser;
 
+      if (!firebaseUser) {
+        setError('Session expired. Please log in again.');
+        setMode('login');
+        setStep('credentials');
+        return;
+      }
+
       setError('');
       setMessage('');
-
-      smsRequestInProgressRef.current =
-        true;
-
       setLoading(true);
 
       try {
-        /*
-         * ----------------------------------------------------
-         * MFA LOGIN RESEND
-         * ----------------------------------------------------
-         */
-
-        if (currentResolver) {
-          const phoneHint =
-            currentResolver.hints.find(
-              (hint: any) =>
-                hint.factorId ===
-                PhoneMultiFactorGenerator.FACTOR_ID
-            );
-
-          if (!phoneHint) {
-            setError(
-              'No phone-based two-factor authentication method was found.'
-            );
-
-            return;
-          }
-
-          /*
-           * Show a fresh reCAPTCHA.
-           */
-          setShowRecaptcha(true);
-
-          await new Promise<void>(
-            (resolve) => {
-              window.requestAnimationFrame(
-                () => resolve()
-              );
-            }
-          );
-
-          const verifier =
-            await createRecaptcha();
-
-          const provider =
-            new PhoneAuthProvider(
-              auth
-            );
-
-          const id =
-            await provider.verifyPhoneNumber(
-              {
-                multiFactorHint:
-                  phoneHint,
-
-                session:
-                  currentResolver.session,
-              },
-              verifier
-            );
-
-          updateVerificationId(id);
-
-          /*
-           * Hide the reCAPTCHA after
-           * successful SMS request.
-           */
-          clearRecaptcha();
-
-          setOtp('');
-
-          setResendCooldown(30);
-
-          setMessage(
-            'A new verification code has been sent.'
-          );
-
-          return;
-        }
-
-        /*
-         * ----------------------------------------------------
-         * FIRST-TIME MFA ENROLLMENT RESEND
-         * ----------------------------------------------------
-         */
-
-        if (firebaseUser) {
-          const normalizedPhone =
-            normalizePhoneNumber(
-              phoneNumber
-            );
-
-          setShowRecaptcha(true);
-
-          await new Promise<void>(
-            (resolve) => {
-              window.requestAnimationFrame(
-                () => resolve()
-              );
-            }
-          );
-
-          const verifier =
-            await createRecaptcha();
-
-          const session =
-            await multiFactor(
-              firebaseUser
-            ).getSession();
-
-          const provider =
-            new PhoneAuthProvider(
-              auth
-            );
-
-          const id =
-            await provider.verifyPhoneNumber(
-              {
-                phoneNumber:
-                  normalizedPhone,
-
-                session,
-              },
-              verifier
-            );
-
-          updateVerificationId(id);
-
-          /*
-           * Hide after successful SMS request.
-           */
-          clearRecaptcha();
-
-          setOtp('');
-
-          setResendCooldown(30);
-
-          setMessage(
-            'A new verification code has been sent.'
-          );
-
-          return;
-        }
-
-        setError(
-          'Verification session not found. Please start again.'
+        const targetEmail = firebaseUser.email || email;
+        const res = await sendEmailOtp(
+          firebaseUser.uid,
+          targetEmail
         );
+
+        if (!res.success) {
+          setError(
+            res.error || "We couldn't send the verification code. Please try again."
+          );
+          return;
+        }
+
+        setResendCooldown(res.cooldownSeconds || 30);
+        setMessage(`A new 6-digit verification code has been sent to ${targetEmail}.`);
       } catch (error: any) {
-        console.error(
-          'Resend OTP error:',
-          error
-        );
-
-        setError(
-          getFirebaseErrorMessage(
-            error
-          )
-        );
-
-        clearRecaptcha();
+        setError(getFirebaseErrorMessage(error));
       } finally {
-        smsRequestInProgressRef.current =
-          false;
-
         setLoading(false);
       }
     };
@@ -1895,77 +1187,16 @@ export default function AuthSystem() {
   const switchMode = (
     nextMode: AuthMode
   ) => {
-    clearRecaptcha();
-
     setMode(nextMode);
-
-    setStep(
-      'credentials'
-    );
-
+    setStep('credentials');
     setError('');
     setMessage('');
-
     setOtp('');
-
-    updateVerificationId('');
-
-    updateMfaResolver(null);
-
-    updatePendingFirebaseUser(
-      null
-    );
-  };
-
-  /* ----------------------------------------------------------
-   * BACK TO CREDENTIALS
-   * ---------------------------------------------------------- */
-
-  const handleBack = () => {
-    clearRecaptcha();
-
-    setError('');
-    setMessage('');
-
-    setOtp('');
-
-    updateVerificationId('');
-
-    updateMfaResolver(null);
-
-    updatePendingFirebaseUser(
-      null
-    );
-
-    setStep(
-      'credentials'
-    );
-  };
-
-  /* ----------------------------------------------------------
-   * CANCEL OTP
-   * ---------------------------------------------------------- */
-
-  const handleCancelOtp = () => {
-    clearRecaptcha();
-
-    setOtp('');
-
-    setError('');
-
-    setMessage('');
-
-    updateVerificationId('');
-
-    updateMfaResolver(null);
-
-    setStep(
-      'credentials'
-    );
+    updatePendingFirebaseUser(null);
   };
 
   /* ==========================================================
-   * LOGGED-IN CARD
+   * LOGGED-IN CARD (IF RENDERED DIRECTLY)
    * ========================================================== */
 
   if (user) {
@@ -1977,55 +1208,32 @@ export default function AuthSystem() {
           margin: '0 auto',
           padding: '28px',
           boxSizing: 'border-box',
-          background:
-            'rgba(5, 9, 20, 0.96)',
-          border:
-            '1px solid rgba(0, 212, 255, 0.55)',
+          background: 'rgba(5, 9, 20, 0.96)',
+          border: '1px solid rgba(0, 212, 255, 0.55)',
           borderRadius: '16px',
-          boxShadow:
-            '0 0 35px rgba(0, 212, 255, 0.10)',
+          boxShadow: '0 0 35px rgba(0, 212, 255, 0.10)',
           color: '#ffffff',
         }}
       >
-        <div
-          style={{
-            textAlign: 'center',
-          }}
-        >
+        <div style={{ textAlign: 'center' }}>
           <div
             style={{
               fontSize: '13px',
               color: '#00d4ff',
               fontWeight: 700,
-              letterSpacing:
-                '0.08em',
-              textTransform:
-                'uppercase',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
               marginBottom: '8px',
             }}
           >
             Welcome back
           </div>
 
-          <h2
-            style={{
-              margin:
-                '0 0 8px',
-              fontSize: '25px',
-              color: '#ffffff',
-            }}
-          >
+          <h2 style={{ margin: '0 0 8px', fontSize: '25px', color: '#ffffff' }}>
             {user.name}
           </h2>
 
-          <p
-            style={{
-              margin:
-                '0 0 22px',
-              color: '#9fb0c8',
-              fontSize: '14px',
-            }}
-          >
+          <p style={{ margin: '0 0 22px', color: '#9fb0c8', fontSize: '14px' }}>
             {user.email}
           </p>
 
@@ -2034,20 +1242,16 @@ export default function AuthSystem() {
             onClick={logout}
             style={{
               width: '100%',
-              padding:
-                '13px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.3)',
-              background:
-                'linear-gradient(135deg, rgba(0,212,255,0.14), rgba(168,85,247,0.14))',
-              color: '#ffffff',
+              padding: '13px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255, 70, 90, 0.3)',
+              background: 'rgba(255, 70, 90, 0.12)',
+              color: '#ff8595',
               fontWeight: 700,
               cursor: 'pointer',
             }}
           >
-            Logout
+            Sign Out
           </button>
         </div>
       </div>
@@ -2055,92 +1259,79 @@ export default function AuthSystem() {
   }
 
   /* ==========================================================
-   * MAIN AUTH CARD
+   * MAIN AUTH CONTAINER
    * ========================================================== */
 
   return (
     <div
       style={{
         width: '100%',
-        maxWidth: '520px',
+        maxWidth: '460px',
         margin: '0 auto',
-        padding: '28px',
+        padding: '32px 28px',
         boxSizing: 'border-box',
-        background:
-          'rgba(5, 9, 20, 0.96)',
-        border:
-          '1px solid rgba(0, 212, 255, 0.55)',
-        borderRadius: '16px',
-        boxShadow:
-          '0 0 35px rgba(0, 212, 255, 0.10), 0 0 70px rgba(168, 85, 247, 0.06)',
+        background: 'rgba(5, 9, 20, 0.96)',
+        border: '1px solid rgba(0, 212, 255, 0.35)',
+        borderRadius: '18px',
+        boxShadow: '0 0 45px rgba(0, 212, 255, 0.12)',
         color: '#ffffff',
       }}
     >
-      {/* ======================================================
-          HEADER
-          ====================================================== */}
-
+      {/* BRAND HEADER */}
       <div
         style={{
           textAlign: 'center',
-          marginBottom: '24px',
+          marginBottom: '26px',
         }}
       >
         <div
           style={{
-            fontSize: '30px',
+            fontSize: '11px',
+            color: '#00d4ff',
             fontWeight: 800,
-            letterSpacing:
-              '-0.03em',
-            background:
-              'linear-gradient(90deg, #00d4ff, #a855f7)',
-            WebkitBackgroundClip:
-              'text',
-            WebkitTextFillColor:
-              'transparent',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
             marginBottom: '6px',
           }}
         >
-          VoxForensics
+          AI Audio Authenticity
         </div>
 
-        <div
+        <h2
           style={{
-            fontSize: '17px',
-            fontWeight: 700,
-            color: '#ffffff',
-            marginBottom: '5px',
+            margin: '0 0 6px',
+            fontSize: '28px',
+            fontWeight: 800,
+            background: 'linear-gradient(135deg, #ffffff 0%, #00d4ff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
           }}
         >
-          {mode === 'login'
-            ? 'Secure Login'
-            : 'Create Account'}
-        </div>
+          VoxForensics
+        </h2>
 
-        <div
+        <p
           style={{
-            color: '#8292aa',
+            margin: 0,
+            color: '#8c9bb1',
             fontSize: '13px',
           }}
         >
-          AI-Based Deepfake Audio Detection System
-        </div>
+          {mode === 'login'
+            ? 'Sign in to access your analysis dashboard'
+            : 'Create an account to start detecting deepfakes'}
+        </p>
       </div>
 
-      {/* ======================================================
-          ERROR
-          ====================================================== */}
-
+      {/* ERROR ALERT */}
       {error && (
         <div
           style={{
-            marginBottom: '18px',
             padding: '12px 14px',
             borderRadius: '10px',
-            background:
-              'rgba(255, 70, 90, 0.08)',
-            border:
-              '1px solid rgba(255, 70, 90, 0.25)',
+            marginBottom: '18px',
+            background: 'rgba(255, 70, 90, 0.12)',
+            border: '1px solid rgba(255, 70, 90, 0.35)',
             color: '#ff9ba8',
             fontSize: '13px',
             lineHeight: 1.5,
@@ -2150,21 +1341,16 @@ export default function AuthSystem() {
         </div>
       )}
 
-      {/* ======================================================
-          MESSAGE
-          ====================================================== */}
-
+      {/* INFO MESSAGE */}
       {message && (
         <div
           style={{
-            marginBottom: '18px',
             padding: '12px 14px',
             borderRadius: '10px',
-            background:
-              'rgba(0, 255, 136, 0.06)',
-            border:
-              '1px solid rgba(0, 255, 136, 0.22)',
-            color: '#8dffc1',
+            marginBottom: '18px',
+            background: 'rgba(0, 212, 255, 0.10)',
+            border: '1px solid rgba(0, 212, 255, 0.30)',
+            color: '#9feaff',
             fontSize: '13px',
             lineHeight: 1.5,
           }}
@@ -2174,33 +1360,18 @@ export default function AuthSystem() {
       )}
 
       {/* ======================================================
-          CREDENTIALS
+          STEP 1: CREDENTIALS (EMAIL + PASSWORD)
           ====================================================== */}
-
-      {step ===
-        'credentials' && (
-        <form
-          onSubmit={
-            handleCredentialsSubmit
-          }
-        >
+      {step === 'credentials' && (
+        <form onSubmit={handleCredentialsSubmit}>
           {mode === 'register' && (
-            <div
-              style={{
-                marginBottom:
-                  '15px',
-              }}
-            >
+            <div style={{ marginBottom: '15px' }}>
               <label
                 style={{
-                  display:
-                    'block',
-                  marginBottom:
-                    '7px',
-                  fontSize:
-                    '13px',
-                  color:
-                    '#b8c6d9',
+                  display: 'block',
+                  marginBottom: '7px',
+                  fontSize: '13px',
+                  color: '#b8c6d9',
                 }}
               >
                 Full Name
@@ -2209,108 +1380,63 @@ export default function AuthSystem() {
               <input
                 type="text"
                 value={name}
-                onChange={(event) =>
-                  setName(
-                    event.target
-                      .value
-                  )
-                }
-                placeholder="Enter your full name"
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Dr. Jane Doe"
+                autoComplete="name"
                 style={{
-                  width:
-                    '100%',
-                  boxSizing:
-                    'border-box',
-                  padding:
-                    '13px 14px',
-                  borderRadius:
-                    '10px',
-                  border:
-                    '1px solid rgba(0, 212, 255, 0.18)',
-                  background:
-                    'rgba(13, 24, 48, 0.85)',
-                  color:
-                    '#ffffff',
-                  outline:
-                    'none',
-                  fontSize:
-                    '14px',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '13px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(0, 212, 255, 0.18)',
+                  background: 'rgba(13, 24, 48, 0.85)',
+                  color: '#ffffff',
+                  outline: 'none',
+                  fontSize: '14px',
                 }}
               />
             </div>
           )}
 
-          <div
-            style={{
-              marginBottom:
-                '15px',
-            }}
-          >
+          <div style={{ marginBottom: '15px' }}>
             <label
               style={{
-                display:
-                  'block',
-                marginBottom:
-                  '7px',
-                fontSize:
-                  '13px',
-                color:
-                  '#b8c6d9',
+                display: 'block',
+                marginBottom: '7px',
+                fontSize: '13px',
+                color: '#b8c6d9',
               }}
             >
-              Email
+              Email Address
             </label>
 
             <input
               type="email"
               value={email}
-              onChange={(event) =>
-                setEmail(
-                  event.target
-                    .value
-                )
-              }
-              placeholder="Enter your email"
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="analyst@voxforensics.com"
               autoComplete="email"
               style={{
-                width:
-                  '100%',
-                boxSizing:
-                  'border-box',
-                padding:
-                  '13px 14px',
-                borderRadius:
-                  '10px',
-                border:
-                  '1px solid rgba(0, 212, 255, 0.18)',
-                background:
-                  'rgba(13, 24, 48, 0.85)',
-                color:
-                  '#ffffff',
-                outline:
-                  'none',
-                fontSize:
-                  '14px',
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '13px 14px',
+                borderRadius: '10px',
+                border: '1px solid rgba(0, 212, 255, 0.18)',
+                background: 'rgba(13, 24, 48, 0.85)',
+                color: '#ffffff',
+                outline: 'none',
+                fontSize: '14px',
               }}
             />
           </div>
 
-          <div
-            style={{
-              marginBottom:
-                '15px',
-            }}
-          >
+          <div style={{ marginBottom: '15px' }}>
             <label
               style={{
-                display:
-                  'block',
-                marginBottom:
-                  '7px',
-                fontSize:
-                  '13px',
-                color:
-                  '#b8c6d9',
+                display: 'block',
+                marginBottom: '7px',
+                fontSize: '13px',
+                color: '#b8c6d9',
               }}
             >
               Password
@@ -2319,12 +1445,7 @@ export default function AuthSystem() {
             <input
               type="password"
               value={password}
-              onChange={(event) =>
-                setPassword(
-                  event.target
-                    .value
-                )
-              }
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               autoComplete={
                 mode === 'login'
@@ -2332,151 +1453,86 @@ export default function AuthSystem() {
                   : 'new-password'
               }
               style={{
-                width:
-                  '100%',
-                boxSizing:
-                  'border-box',
-                padding:
-                  '13px 14px',
-                borderRadius:
-                  '10px',
-                border:
-                  '1px solid rgba(0, 212, 255, 0.18)',
-                background:
-                  'rgba(13, 24, 48, 0.85)',
-                color:
-                  '#ffffff',
-                outline:
-                  'none',
-                fontSize:
-                  '14px',
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '13px 14px',
+                borderRadius: '10px',
+                border: '1px solid rgba(0, 212, 255, 0.18)',
+                background: 'rgba(13, 24, 48, 0.85)',
+                color: '#ffffff',
+                outline: 'none',
+                fontSize: '14px',
               }}
             />
           </div>
 
           {mode === 'register' && (
             <>
-              <div
-                style={{
-                  marginBottom:
-                    '15px',
-                }}
-              >
+              <div style={{ marginBottom: '15px' }}>
                 <label
                   style={{
-                    display:
-                      'block',
-                    marginBottom:
-                      '7px',
-                    fontSize:
-                      '13px',
-                    color:
-                      '#b8c6d9',
+                    display: 'block',
+                    marginBottom: '7px',
+                    fontSize: '13px',
+                    color: '#b8c6d9',
                   }}
                 >
-                  Phone Number
+                  Phone Number{' '}
+                  <span style={{ color: '#65758c' }}>
+                    (Optional)
+                  </span>
                 </label>
 
                 <input
                   type="tel"
-                  value={
-                    phoneNumber
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setPhoneNumber(
-                      event.target
-                        .value
-                    )
-                  }
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="+91 9876543210"
                   autoComplete="tel"
                   style={{
-                    width:
-                      '100%',
-                    boxSizing:
-                      'border-box',
-                    padding:
-                      '13px 14px',
-                    borderRadius:
-                      '10px',
-                    border:
-                      '1px solid rgba(0, 212, 255, 0.18)',
-                    background:
-                      'rgba(13, 24, 48, 0.85)',
-                    color:
-                      '#ffffff',
-                    outline:
-                      'none',
-                    fontSize:
-                      '14px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '13px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(0, 212, 255, 0.18)',
+                    background: 'rgba(13, 24, 48, 0.85)',
+                    color: '#ffffff',
+                    outline: 'none',
+                    fontSize: '14px',
                   }}
                 />
               </div>
 
-              <div
-                style={{
-                  marginBottom:
-                    '18px',
-                }}
-              >
+              <div style={{ marginBottom: '18px' }}>
                 <label
                   style={{
-                    display:
-                      'block',
-                    marginBottom:
-                      '7px',
-                    fontSize:
-                      '13px',
-                    color:
-                      '#b8c6d9',
+                    display: 'block',
+                    marginBottom: '7px',
+                    fontSize: '13px',
+                    color: '#b8c6d9',
                   }}
                 >
                   Referral Code{' '}
-                  <span
-                    style={{
-                      color:
-                        '#65758c',
-                    }}
-                  >
+                  <span style={{ color: '#65758c' }}>
                     (Optional)
                   </span>
                 </label>
 
                 <input
                   type="text"
-                  value={
-                    referralCode
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setReferralCode(
-                      event.target
-                        .value
-                    )
-                  }
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value)}
                   placeholder="VOX-XXXXXX"
                   style={{
-                    width:
-                      '100%',
-                    boxSizing:
-                      'border-box',
-                    padding:
-                      '13px 14px',
-                    borderRadius:
-                      '10px',
-                    border:
-                      '1px solid rgba(0, 212, 255, 0.18)',
-                    background:
-                      'rgba(13, 24, 48, 0.85)',
-                    color:
-                      '#ffffff',
-                    outline:
-                      'none',
-                    fontSize:
-                      '14px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '13px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(0, 212, 255, 0.18)',
+                    background: 'rgba(13, 24, 48, 0.85)',
+                    color: '#ffffff',
+                    outline: 'none',
+                    fontSize: '14px',
                   }}
                 />
               </div>
@@ -2488,25 +1544,15 @@ export default function AuthSystem() {
             disabled={loading}
             style={{
               width: '100%',
-              padding:
-                '13px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.3)',
+              padding: '13px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 212, 255, 0.3)',
               background:
                 'linear-gradient(135deg, rgba(0,212,255,0.20), rgba(168,85,247,0.20))',
-              color:
-                '#ffffff',
+              color: '#ffffff',
               fontWeight: 800,
-              cursor:
-                loading
-                  ? 'not-allowed'
-                  : 'pointer',
-              opacity:
-                loading
-                  ? 0.65
-                  : 1,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.65 : 1,
             }}
           >
             {loading
@@ -2518,14 +1564,10 @@ export default function AuthSystem() {
 
           <div
             style={{
-              textAlign:
-                'center',
-              marginTop:
-                '18px',
-              color:
-                '#8292aa',
-              fontSize:
-                '13px',
+              textAlign: 'center',
+              marginTop: '18px',
+              color: '#8292aa',
+              fontSize: '13px',
             }}
           >
             {mode === 'login'
@@ -2542,16 +1584,11 @@ export default function AuthSystem() {
                 )
               }
               style={{
-                border:
-                  'none',
-                background:
-                  'transparent',
-                color:
-                  '#00d4ff',
-                fontWeight:
-                  700,
-                cursor:
-                  'pointer',
+                border: 'none',
+                background: 'transparent',
+                color: '#00d4ff',
+                fontWeight: 700,
+                cursor: 'pointer',
                 padding: 0,
               }}
             >
@@ -2564,23 +1601,14 @@ export default function AuthSystem() {
       )}
 
       {/* ======================================================
-          EMAIL VERIFICATION
+          STEP 2: EMAIL VERIFICATION NOTICE
           ====================================================== */}
-
-      {step ===
-        'verify-email' && (
-        <div
-          style={{
-            textAlign:
-              'center',
-          }}
-        >
+      {step === 'verify-email' && (
+        <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              fontSize:
-                '46px',
-              marginBottom:
-                '15px',
+              fontSize: '46px',
+              marginBottom: '15px',
             }}
           >
             ✉️
@@ -2588,12 +1616,9 @@ export default function AuthSystem() {
 
           <h3
             style={{
-              margin:
-                '0 0 10px',
-              color:
-                '#ffffff',
-              fontSize:
-                '21px',
+              margin: '0 0 10px',
+              color: '#ffffff',
+              fontSize: '21px',
             }}
           >
             Verify Your Email
@@ -2601,88 +1626,48 @@ export default function AuthSystem() {
 
           <p
             style={{
-              margin:
-                '0 0 22px',
-              color:
-                '#8c9bb1',
-              fontSize:
-                '13px',
-              lineHeight:
-                1.6,
+              margin: '0 0 22px',
+              color: '#8c9bb1',
+              fontSize: '13px',
+              lineHeight: 1.6,
             }}
           >
-            We've sent a verification
-            link to{' '}
-            <strong
-              style={{
-                color:
-                  '#bcefff',
-              }}
-            >
-              {email}
-            </strong>
-            . Verify your email before
-            continuing.
+            We've sent a verification email to your address. Please verify your email to continue.
           </p>
 
           <button
             type="button"
-            onClick={
-              handleEmailVerified
-            }
+            onClick={handleEmailVerified}
             disabled={loading}
             style={{
               width: '100%',
-              padding:
-                '13px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.3)',
+              padding: '13px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 212, 255, 0.3)',
               background:
                 'linear-gradient(135deg, rgba(0,212,255,0.20), rgba(168,85,247,0.20))',
-              color:
-                '#ffffff',
+              color: '#ffffff',
               fontWeight: 800,
-              cursor:
-                loading
-                  ? 'not-allowed'
-                  : 'pointer',
-              opacity:
-                loading
-                  ? 0.65
-                  : 1,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.65 : 1,
             }}
           >
-            {loading
-              ? 'Checking...'
-              : 'I Have Verified My Email'}
+            {loading ? 'Checking...' : "I've Verified My Email"}
           </button>
 
           <button
             type="button"
-            onClick={
-              handleResendEmail
-            }
+            onClick={handleResendEmail}
             style={{
-              width:
-                '100%',
-              marginTop:
-                '10px',
-              padding:
-                '12px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.22)',
-              background:
-                'rgba(13, 24, 48, 0.7)',
-              color:
-                '#9feaff',
-              fontWeight:
-                700,
-              cursor:
-                'pointer',
+              width: '100%',
+              marginTop: '10px',
+              padding: '12px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 212, 255, 0.22)',
+              background: 'rgba(13, 24, 48, 0.7)',
+              color: '#9feaff',
+              fontWeight: 700,
+              cursor: 'pointer',
             }}
           >
             Resend Verification Email
@@ -2690,466 +1675,179 @@ export default function AuthSystem() {
 
           <button
             type="button"
-            onClick={
-              handleBack
-            }
+            onClick={handleSignOut}
             style={{
-              border:
-                'none',
-              background:
-                'transparent',
-              color:
-                '#00d4ff',
-              fontWeight:
-                700,
-              cursor:
-                'pointer',
-              padding:
-                '12px 0 0',
+              width: '100%',
+              marginTop: '10px',
+              padding: '12px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255, 70, 90, 0.25)',
+              background: 'rgba(255, 70, 90, 0.08)',
+              color: '#ff9ba8',
+              fontWeight: 700,
+              cursor: 'pointer',
             }}
           >
-            Back
+            Back to Login
           </button>
         </div>
       )}
 
       {/* ======================================================
-          PHONE ENROLLMENT
+          STEP 3: EMAIL OTP VERIFICATION SCREEN
           ====================================================== */}
-
-      {step ===
-        'phone' && (
-        <div>
+      {step === 'email-otp' && (
+        <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              textAlign:
-                'center',
-              marginBottom:
-                '20px',
+              fontSize: '42px',
+              marginBottom: '10px',
             }}
           >
-            <div
-              style={{
-                fontSize:
-                  '42px',
-                marginBottom:
-                  '10px',
-              }}
-            >
-              📱
-            </div>
-
-            <h3
-              style={{
-                margin:
-                  '0 0 8px',
-                fontSize:
-                  '21px',
-                color:
-                  '#ffffff',
-              }}
-            >
-              Enable Two-Factor Authentication
-            </h3>
-
-            <p
-              style={{
-                margin:
-                  0,
-                color:
-                  '#8c9bb1',
-                fontSize:
-                  '13px',
-                lineHeight:
-                  1.6,
-              }}
-            >
-              Your phone number will be used
-              to secure your VoxForensics
-              account.
-            </p>
+            📧
           </div>
 
-          <div
+          <h3
             style={{
-              marginBottom:
-                '15px',
+              margin: '0 0 8px',
+              fontSize: '21px',
+              color: '#ffffff',
             }}
           >
-            <label
-              style={{
-                display:
-                  'block',
-                marginBottom:
-                  '7px',
-                fontSize:
-                  '13px',
-                color:
-                  '#b8c6d9',
-              }}
-            >
-              Phone Number
-            </label>
+            Verify Your Email
+          </h3>
 
-            <input
-              type="tel"
-              value={
-                phoneNumber
-              }
-              onChange={(event) =>
-                setPhoneNumber(
-                  event.target
-                    .value
-                )
-              }
-              placeholder="+91 9876543210"
-              style={{
-                width:
-                  '100%',
-                boxSizing:
-                  'border-box',
-                padding:
-                  '13px 14px',
-                borderRadius:
-                  '10px',
-                border:
-                  '1px solid rgba(0, 212, 255, 0.18)',
-                background:
-                  'rgba(13, 24, 48, 0.85)',
-                color:
-                  '#ffffff',
-                outline:
-                  'none',
-                fontSize:
-                  '14px',
-              }}
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={
-              handleSendEnrollmentCode
-            }
-            disabled={loading}
+          <p
             style={{
-              width:
-                '100%',
-              padding:
-                '13px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.3)',
-              background:
-                'linear-gradient(135deg, rgba(0,212,255,0.20), rgba(168,85,247,0.20))',
-              color:
-                '#ffffff',
-              fontWeight:
-                800,
-              cursor:
-                loading
-                  ? 'not-allowed'
-                  : 'pointer',
-              opacity:
-                loading
-                  ? 0.65
-                  : 1,
+              margin: '0 0 4px',
+              color: '#8c9bb1',
+              fontSize: '13px',
+              lineHeight: 1.6,
             }}
           >
-            {loading
-              ? 'Sending...'
-              : 'Send Verification Code'}
-          </button>
+            We sent a 6-digit verification code to:
+          </p>
 
-          <button
-            type="button"
-            onClick={
-              handleBack
-            }
+          <p
             style={{
-              width:
-                '100%',
-              marginTop:
-                '10px',
-              padding:
-                '12px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.22)',
-              background:
-                'rgba(13, 24, 48, 0.7)',
-              color:
-                '#9feaff',
-              fontWeight:
-                700,
-              cursor:
-                'pointer',
+              margin: '0 0 20px',
+              color: '#00d4ff',
+              fontSize: '14px',
+              fontWeight: 700,
             }}
           >
-            Back
-          </button>
-        </div>
-      )}
+            {auth.currentUser?.email || pendingFirebaseUser?.email || email || 'your email'}
+          </p>
 
-      {/* ======================================================
-          OTP
-          ====================================================== */}
-
-      {step === 'otp' && (
-        <div>
-          <div
-            style={{
-              textAlign:
-                'center',
-              marginBottom:
-                '20px',
-            }}
-          >
-            <div
-              style={{
-                fontSize:
-                  '42px',
-                marginBottom:
-                  '10px',
-              }}
-            >
-              🔐
-            </div>
-
-            <h3
-              style={{
-                margin:
-                  '0 0 8px',
-                fontSize:
-                  '21px',
-                color:
-                  '#ffffff',
-              }}
-            >
-              Enter Verification Code
-            </h3>
-
-            <p
-              style={{
-                margin:
-                  0,
-                color:
-                  '#8c9bb1',
-                fontSize:
-                  '13px',
-                lineHeight:
-                  1.6,
-              }}
-            >
-              Enter the 6-digit verification
-              code sent to your phone.
-            </p>
-          </div>
-
-          <div
-            style={{
-              marginBottom:
-                '15px',
-            }}
-          >
-            <label
-              style={{
-                display:
-                  'block',
-                marginBottom:
-                  '7px',
-                fontSize:
-                  '13px',
-                color:
-                  '#b8c6d9',
-              }}
-            >
-              Verification Code
-            </label>
-
+          <div style={{ marginBottom: '18px' }}>
             <input
               type="text"
               inputMode="numeric"
               maxLength={6}
               value={otp}
-              onChange={(event) =>
-                setOtp(
-                  event.target
-                    .value
-                    .replace(
-                      /\D/g,
-                      ''
-                    )
-                )
-              }
-              placeholder="Enter 6-digit code"
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+              placeholder="· · · · · ·"
               autoComplete="one-time-code"
+              autoFocus
               style={{
-                width:
-                  '100%',
-                boxSizing:
-                  'border-box',
-                padding:
-                  '13px 14px',
-                borderRadius:
-                  '10px',
-                border:
-                  '1px solid rgba(0, 212, 255, 0.18)',
-                background:
-                  'rgba(13, 24, 48, 0.85)',
-                color:
-                  '#ffffff',
-                outline:
-                  'none',
-                fontSize:
-                  '18px',
-                letterSpacing:
-                  '0.25em',
-                textAlign:
-                  'center',
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1px solid rgba(0, 212, 255, 0.3)',
+                background: 'rgba(13, 24, 48, 0.85)',
+                color: '#ffffff',
+                outline: 'none',
+                fontSize: '22px',
+                letterSpacing: '0.35em',
+                textAlign: 'center',
+                fontFamily: 'monospace',
               }}
             />
           </div>
 
           <button
             type="button"
-            onClick={
-              handleVerifyEnrollment
-            }
-            disabled={
-              loading ||
-              otp.length !== 6
-            }
+            onClick={handleVerifyEmailOtp}
+            disabled={loading || otp.length !== 6}
             style={{
-              width:
-                '100%',
-              padding:
-                '13px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.3)',
+              width: '100%',
+              padding: '13px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 212, 255, 0.3)',
               background:
                 'linear-gradient(135deg, rgba(0,212,255,0.20), rgba(168,85,247,0.20))',
-              color:
-                '#ffffff',
-              fontWeight:
-                800,
+              color: '#ffffff',
+              fontWeight: 800,
               cursor:
-                loading ||
-                otp.length !==
-                  6
+                loading || otp.length !== 6
                   ? 'not-allowed'
                   : 'pointer',
               opacity:
-                loading ||
-                otp.length !==
-                  6
+                loading || otp.length !== 6
                   ? 0.55
                   : 1,
             }}
           >
-            {loading
-              ? 'Verifying...'
-              : 'Verify Code'}
+            {loading ? 'Verifying...' : 'Verify Code'}
           </button>
+
+          <p
+            style={{
+              margin: '16px 0 6px',
+              color: '#8c9bb1',
+              fontSize: '12px',
+            }}
+          >
+            Didn't receive it?
+          </p>
 
           <button
             type="button"
-            onClick={
-              handleResendCode
-            }
-            disabled={
-              loading ||
-              resendCooldown > 0
-            }
+            onClick={handleResendEmailOtp}
+            disabled={loading || resendCooldown > 0}
             style={{
-              width:
-                '100%',
-              marginTop:
-                '10px',
-              padding:
-                '12px 18px',
-              borderRadius:
-                '10px',
-              border:
-                '1px solid rgba(0, 212, 255, 0.22)',
-              background:
-                'rgba(13, 24, 48, 0.7)',
-              color:
-                '#9feaff',
-              fontWeight:
-                700,
+              width: '100%',
+              padding: '12px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 212, 255, 0.22)',
+              background: 'rgba(13, 24, 48, 0.7)',
+              color: '#9feaff',
+              fontWeight: 700,
               cursor:
-                loading ||
-                resendCooldown >
-                  0
+                loading || resendCooldown > 0
                   ? 'not-allowed'
                   : 'pointer',
               opacity:
-                loading ||
-                resendCooldown >
-                  0
+                loading || resendCooldown > 0
                   ? 0.55
                   : 1,
             }}
           >
-            {resendCooldown >
-            0
+            {resendCooldown > 0
               ? `Resend Code (${resendCooldown}s)`
               : 'Resend Code'}
           </button>
 
           <button
             type="button"
-            onClick={
-              handleCancelOtp
-            }
+            onClick={handleSignOut}
             style={{
-              border:
-                'none',
-              background:
-                'transparent',
-              color:
-                '#00d4ff',
-              fontWeight:
-                700,
-              cursor:
-                'pointer',
-              padding:
-                '12px 0 0',
-              width:
-                '100%',
+              width: '100%',
+              marginTop: '10px',
+              padding: '12px 18px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255, 70, 90, 0.25)',
+              background: 'rgba(255, 70, 90, 0.08)',
+              color: '#ff9ba8',
+              fontWeight: 700,
+              cursor: 'pointer',
             }}
           >
-            Cancel
+            Back to Login
           </button>
         </div>
       )}
-
-      {/* ======================================================
-          RECAPTCHA CONTAINER
-
-          IMPORTANT:
-          It is NOT visible just because we are on the
-          OTP screen.
-
-          It is visible only while Firebase is requesting
-          the SMS verification code.
-
-          Once verifyPhoneNumber() succeeds,
-          clearRecaptcha() hides and destroys it.
-          ====================================================== */}
-
-      <div
-        id="voxforensics-recaptcha-container"
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-        }}
-      />
     </div>
   );
 }

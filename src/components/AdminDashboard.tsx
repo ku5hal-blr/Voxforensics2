@@ -1,4 +1,12 @@
 import { useState, useEffect } from 'react';
+import {
+  collection,
+  doc,
+  deleteDoc,
+  setDoc,
+  onSnapshot,
+} from 'firebase/firestore';
+import { db } from '../firebase';
 import { User } from './AuthSystem';
 
 export default function AdminDashboard({
@@ -11,15 +19,69 @@ export default function AdminDashboard({
   onBack: () => void;
 }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     'overview' | 'users' | 'analytics' | 'settings'
   >('overview');
 
   useEffect(() => {
-    const allUsers: User[] = JSON.parse(
-      localStorage.getItem('voxforensics_users') || '[]'
+    setLoading(true);
+    setError(null);
+
+    const usersRef = collection(db, 'users');
+
+    const unsubscribe = onSnapshot(
+      usersRef,
+      (snapshot) => {
+        const loadedUsers: User[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          let createdAtStr = new Date().toISOString();
+          if (data.createdAt) {
+            if (typeof data.createdAt.toDate === 'function') {
+              createdAtStr = data.createdAt.toDate().toISOString();
+            } else if (typeof data.createdAt === 'string') {
+              createdAtStr = data.createdAt;
+            } else if (data.createdAt instanceof Date) {
+              createdAtStr = data.createdAt.toISOString();
+            } else if (typeof data.createdAt === 'number') {
+              createdAtStr = new Date(data.createdAt).toISOString();
+            }
+          }
+
+          return {
+            id: data.id || data.uid || docSnap.id,
+            email: data.email || '',
+            name: data.name || data.username || 'VoxForensics User',
+            phoneNumber: data.phoneNumber || '',
+            role: data.role === 'admin' ? 'admin' : 'user',
+            referralCode: data.referralCode || '',
+            referredBy: data.referredBy || undefined,
+            createdAt: createdAtStr,
+            twoFactorEnabled: Boolean(data.twoFactorEnabled),
+          };
+        });
+
+        // Sort newest first
+        loadedUsers.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setUsers(loadedUsers);
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('Firestore onSnapshot error in AdminDashboard:', err);
+        setError(
+          'Failed to load users from Firestore. Please ensure you are logged in with admin privileges.'
+        );
+        setLoading(false);
+      }
     );
-    setUsers(allUsers);
+
+    return () => unsubscribe();
   }, []);
 
   const totalUsers = users.length;
@@ -27,33 +89,44 @@ export default function AdminDashboard({
   const regularUsers = users.filter((u) => u.role === 'user').length;
   const twoFactorEnabled = users.filter((u) => u.twoFactorEnabled).length;
 
-  const deleteUser = (userId: string) => {
+  const deleteUser = async (userId: string) => {
+    if (userId === currentUser.id) {
+      alert('You cannot delete your own admin account.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this user?')) {
-      const updatedUsers = users.filter((u) => u.id !== userId);
-      setUsers(updatedUsers);
-      localStorage.setItem(
-        'voxforensics_users',
-        JSON.stringify(updatedUsers)
-      );
+      try {
+        await deleteDoc(doc(db, 'users', userId));
+      } catch (err: any) {
+        console.error('Failed to delete user:', err);
+        alert(`Failed to delete user: ${err?.message || 'Permission denied'}`);
+      }
     }
   };
 
-  const toggleUserRole = (userId: string) => {
-    const updatedUsers = users.map((u) => {
-      if (u.id === userId) {
-        return {
-          ...u,
-          role: (u.role === 'admin' ? 'user' : 'admin') as 'user' | 'admin',
-        };
-      }
-      return u;
-    });
+  const toggleUserRole = async (userId: string) => {
+    if (userId === currentUser.id) {
+      alert('You cannot change your own admin role.');
+      return;
+    }
 
-    setUsers(updatedUsers);
-    localStorage.setItem(
-      'voxforensics_users',
-      JSON.stringify(updatedUsers)
-    );
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return;
+
+    const nextRole: 'user' | 'admin' =
+      targetUser.role === 'admin' ? 'user' : 'admin';
+
+    try {
+      await setDoc(
+        doc(db, 'users', userId),
+        { role: nextRole },
+        { merge: true }
+      );
+    } catch (err: any) {
+      console.error('Failed to update user role:', err);
+      alert(`Failed to update role: ${err?.message || 'Permission denied'}`);
+    }
   };
 
   return (
@@ -180,14 +253,22 @@ export default function AdminDashboard({
               </h2>
 
               <div className="space-y-3">
-                {users
-                  .slice(-5)
-                  .reverse()
-                  .map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5"
-                    >
+                {loading ? (
+                  <p className="text-xs text-gray-400 py-3 text-center">
+                    Loading users from Firestore...
+                  </p>
+                ) : users.length === 0 ? (
+                  <p className="text-xs text-gray-500 py-3 text-center">
+                    No registered users found.
+                  </p>
+                ) : (
+                  users
+                    .slice(0, 5)
+                    .map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5"
+                      >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white font-bold">
                           {user.name.charAt(0).toUpperCase()}
@@ -222,7 +303,8 @@ export default function AdminDashboard({
                         </span>
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -231,12 +313,34 @@ export default function AdminDashboard({
         {/* Users Tab */}
         {activeTab === 'users' && (
           <div className="glass-card p-6">
-            <h2 className="text-lg font-bold text-white mb-4">
-              👥 User Management
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">
+                👥 User Management
+              </h2>
+              {loading && (
+                <span className="text-xs text-cyan-400 animate-pulse">
+                  Syncing Firestore...
+                </span>
+              )}
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                ⚠️ {error}
+              </div>
+            )}
 
             <div className="space-y-3">
-              {users.map((user) => (
+              {loading && users.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  Loading users from Firestore...
+                </div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 text-sm">
+                  No users registered yet.
+                </div>
+              ) : (
+                users.map((user) => (
                 <div
                   key={user.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5"
@@ -299,7 +403,8 @@ export default function AdminDashboard({
                     </button>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           </div>
         )}
@@ -395,8 +500,8 @@ export default function AdminDashboard({
                 <div className="text-xs text-gray-400 space-y-1">
                   <p>Version: 3.2.1</p>
                   <p>Environment: Production</p>
-                  <p>Database: localStorage</p>
-                  <p>Authentication: Client-side</p>
+                  <p>Database: Firestore</p>
+                  <p>Authentication: Firebase Auth</p>
                 </div>
               </div>
 
@@ -409,24 +514,21 @@ export default function AdminDashboard({
                   onClick={() => {
                     if (
                       confirm(
-                        'This will delete ALL user data. Are you sure?'
+                        'This will clear local client caches (scan history and consent). Are you sure?'
                       )
                     ) {
-                      localStorage.removeItem(
-                        'voxforensics_users'
-                      );
                       localStorage.removeItem(
                         'voxforensics_history'
                       );
                       localStorage.removeItem(
                         'voxforensics_consent'
                       );
-                      setUsers([]);
+                      alert('Local client caches cleared successfully.');
                     }
                   }}
                   className="neon-btn neon-btn-danger text-xs"
                 >
-                  🗑️ Reset All System Data
+                  🗑️ Clear Local Caches
                 </button>
               </div>
             </div>
