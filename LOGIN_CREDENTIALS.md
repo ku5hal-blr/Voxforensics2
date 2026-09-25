@@ -1,121 +1,91 @@
-# 🔐 Login Credentials
+# 🔐 VoxForensics Demonstration Credentials & Evaluation Guide
 
-## Demo Accounts (Pre-configured)
+This document provides credentials and step-by-step instructions for evaluation, academic presentation, and demonstration of the VoxForensics application.
 
-### 👑 Admin Account
-```
-Email: admin@voxforensics.com
+---
+
+## 👑 Primary Administrator Account
+
+A primary administrator account is pre-configured in Firebase Authentication for administrative demonstration:
+
+```text
+Email:    admin@voxforensics.com
 Password: admin123
 ```
-**Access:** Full admin dashboard with user management, analytics, and system settings
+- **Role:** `admin` (System Administrator)
+- **Features Unlocked:**
+  - Full access to the **Admin Dashboard**
+  - Live user management from Firestore `/users`
+  - User promotion and demotion
+  - **Secure Server-Side Deletion**: Deletes accounts via the `deleteUserAccount` Cloud Function
+  - System statistics and MFA adoption metrics
+  - All standard audio forensic, scanner, and batch processing features
 
 ---
 
-### 👤 User Account
-```
-Email: user@example.com
-Password: user123
-```
-**Access:** User dashboard with personal stats, scan history, and referral program
+## 👤 Standard User Demonstration Flow
+
+For standard user evaluation, **no pre-created, hardcoded, or permanent demo user account exists in Firebase**. 
+
+The evaluator can demonstrate the complete real-world user lifecycle directly through the application's authentication flow:
+
+1. **Register a New Account**:
+   - Open the application at `http://localhost:3000`.
+   - Click **"Register"** on the authentication modal.
+   - Enter a Name, valid Email address, and Password (minimum 6 characters).
+   - *(Optional)* Enter an active referral code (e.g., `VF-ADMIN01`).
+   - Click **"Create Account"**.
+
+2. **Complete Email Verification**:
+   - Firebase Authentication automatically dispatches a verification email.
+   - The user must open the verification email and click the verification link before proceeding.
+
+3. **Complete Email OTP Verification**:
+   - Return to the login screen and enter the verified email and password.
+   - During login, the application generates a cryptographically secure 6-digit Email OTP and dispatches it to the user's email.
+   - Enter the 6-digit code on the OTP verification screen to complete authentication.
+
+4. **Demonstrating Features with the New User Account**:
+   - After successful authentication, the newly registered account serves as the active demo user account.
+   - The evaluator can now demonstrate all user-tier capabilities:
+     - **Audio Analysis**: Drag-and-drop file upload (up to 50 MB) and live microphone recording with visualizer bars.
+     - **Random Forest ML Classification**: Live inference returning real vs. fake verdicts, confidence percentages, and class probabilities.
+     - **Batch Processing**: Queuing multiple audio files for sequential analysis with live progress tracking and error isolation.
+     - **Forensic PDF Reports**: Downloading evidentiary reports featuring embedded audio waveforms.
+     - **Scan History**: Viewing persistent scan records in Firestore with individual or bulk deletion.
+     - **User Dashboard**: Viewing personal scan metrics, security settings, and referral program status.
+     - **Referral Program**: Accessing and sharing the account's unique referral code (`VF-XXXXXX`).
 
 ---
 
-## 🚀 How to Login
+## 🚀 How to Sign In
 
-1. **Open the app** - You'll see the login screen
-2. **Enter credentials** - Use one of the accounts above
-3. **Click "Login"** - You'll be taken to the main app
-4. **Access Dashboard** - Click "👤 Dashboard" button at the top
+### To Sign In as Administrator:
+1. Open `http://localhost:3000`.
+2. Enter the administrator credentials (`admin@voxforensics.com` / `admin123`).
+   *(Click the eye icon to toggle password visibility if needed).*
+3. Click **"Login"**.
+4. Click **"👤 Dashboard"** in the top navigation bar to open the **Admin Dashboard**.
 
----
-
-## 📝 Create Your Own Account
-
-If you want to create a new account:
-
-1. Click **"Register"** on the login screen
-2. Fill in:
-   - **Name:** Your name
-   - **Email:** Your email
-   - **Password:** At least 6 characters
-   - **Referral Code:** (Optional) Use `VF-ADMIN01` or `VF-USER001`
-3. Click **"Register"**
-4. Setup 2FA (optional) or skip
-5. Login with your new credentials
+### To Sign In as a Standard User:
+1. Follow the registration and email verification steps described above.
+2. Enter your registered credentials on the login screen.
+3. Complete the Email OTP step when prompted.
+4. Click **"👤 Dashboard"** in the top navigation bar to open the **User Dashboard**.
 
 ---
 
-## 🎯 Quick Test
+## 🎁 Active Referral Code for Testing Registration
 
-### Test Admin Features:
-1. Login with `admin@voxforensics.com` / `admin123`
-2. Click "👤 Dashboard"
-3. You'll see the Admin Dashboard with:
-   - User management
-   - System analytics
-   - Platform settings
+When demonstrating user registration with referral tracking, the evaluator can use the active administrator referral code:
+- **Referral Code:** `VF-ADMIN01`
 
-### Test User Features:
-1. Login with `user@example.com` / `user123`
-2. Click "👤 Dashboard"
-3. You'll see the User Dashboard with:
-   - Personal stats
-   - Scan history
-   - Referral code: `VF-USER001`
+Entering this code during registration links the new user profile (`referredBy: "VF-ADMIN01"`) and updates the administrator's referral statistics.
 
 ---
 
-## 🔑 Your Referral Codes
+## 🔒 Security Notice for Evaluation
 
-Once logged in, you can find your referral code in the dashboard:
-
-- **Admin:** `VF-ADMIN01`
-- **Demo User:** `VF-USER001`
-
-Share these codes with friends when they register!
-
----
-
-## 🐛 Troubleshooting
-
-### "Invalid email or password"
-- Make sure you're using the exact credentials above
-- Check for typos (case-sensitive)
-- Try clearing browser cache and refreshing
-
-### "Can't see dashboard"
-- Make sure you're logged in
-- Click the "👤 Dashboard" button at the top of the page
-- Check that you have the correct role (admin vs user)
-
-### "Demo accounts not working"
-- The demo accounts are automatically created on first load
-- Try refreshing the page
-- Clear localStorage and reload
-
----
-
-## 📊 What You Can Do
-
-### As Admin:
-- ✅ View all registered users
-- ✅ Promote/demote users
-- ✅ Delete user accounts
-- ✅ View system analytics
-- ✅ Access platform settings
-- ✅ See referral statistics
-
-### As User:
-- ✅ View personal statistics
-- ✅ See scan history
-- ✅ Access referral code
-- ✅ Track referrals
-- ✅ View security settings
-
----
-
-## 🎉 That's It!
-
-You're all set! Use the credentials above to login and explore VoxForensics with full authentication.
-
-**Happy analyzing!** 🎙️🔍
+- Only the primary administrator account (`admin@voxforensics.com`) is pre-configured in Firebase Authentication for evaluation.
+- Protection is enforced for the primary administrator: `admin@voxforensics.com` cannot be deleted even by other administrators.
+- No fake, non-existent, or hardcoded user credentials are provided. All user testing reflects the live registration, verification, and authentication flow.

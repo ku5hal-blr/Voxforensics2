@@ -1,426 +1,154 @@
-# 🎨 VoxForensics - Complete Feature Testing Guide
+# 🧪 VoxForensics - Complete Feature Testing Guide
 
-## ✅ What's Been Implemented
-
-### 🖼️ New Background Design
-- **AI Face Background**: Added a futuristic AI/robotic face image that appears on the right side
-- **Gradient Masking**: The face fades out smoothly on the left and bottom using CSS masks
-- **Opacity**: Set to 35% so it's visible but doesn't interfere with content
-- **Fixed Position**: Stays in place while scrolling
-
-### 🎨 Enhanced Visual Effects
-- **Drop Shadows**: Added to all text elements for better readability over the background
-- **Backdrop Blur**: Applied to badges, buttons, and feature cards
-- **Glass Panels**: Increased opacity to 70% (from 60%) for better contrast
-- **Z-Index Layers**: Proper layering so content appears above background
-
-### 🎯 Design Improvements
-- **4-Column Feature Grid**: Feature cards now display in 4 columns on large screens
-- **Better Typography**: Improved text shadows and contrast
-- **Enhanced Buttons**: Sample buttons now have backdrop blur
-- **Professional Look**: Matches the HTML template design perfectly
+This guide walks through testing all features of the current VoxForensics application, including **Firebase Authentication**, **Email OTP MFA**, the **Random Forest ML backend**, **Batch Processing**, **Forensic PDF Generation with Waveforms**, and the **Admin Dashboard**.
 
 ---
 
-## 🧪 How to Test All Features
+## 📋 System Prerequisites Before Testing
 
-### 1. **Login & Authentication** ✅
+Ensure both services are running locally before starting your test session:
 
-**Demo Accounts:**
-```
-Admin: admin@voxforensics.com / admin123
-User: user@example.com / user123
-```
+1. **Machine Learning Backend (FastAPI)**:
+   ```powershell
+   # In Voxforensics2-1 directory
+   .\ml\.venv\Scripts\Activate.ps1
+   python -m uvicorn ml.api:app --reload --port 8000
+   ```
+   *Verify healthy startup: visit `http://127.0.0.1:8000/docs` in your browser.*
 
-**Test Steps:**
-1. Open the app → Login screen appears
-2. Enter admin credentials → Click "Login"
-3. Accept consent agreement → Check the box → Click "I Agree"
-4. You'll see the main interface with the AI face background
-
-**Expected Result:**
-- ✅ Login works smoothly
-- ✅ Consent modal appears with expandable sections
-- ✅ Background image visible behind content
-- ✅ Text is readable with drop shadows
+2. **Frontend Application (Vite)**:
+   ```bash
+   npm run dev
+   ```
+   *Application will be live at: `http://localhost:3000`.*
 
 ---
 
-### 2. **Real Voice Detection** ✅
+## 🧪 Test Suite Checklist
 
-**Test Method 1: Sample Button**
-1. Click **"Try sample: Real voice"** button (green)
-2. Wait 2-3 seconds for analysis
-3. **Expected Result:**
-   - Verdict: "Real Voice" (green text)
-   - Confidence: 85-98%
-   - Features displayed: MFCC, Pitch, Centroid, ZCR
-
-**Test Method 2: Upload Real Audio**
-1. Click the upload panel or drag & drop a real voice recording
-2. Supported formats: WAV, MP3, M4A, FLAC (max 25MB)
-3. Wait for analysis
-4. **Expected Result:**
-   - Verdict: "Real Voice" (green text)
-   - High confidence (85%+)
-   - Natural pitch variability (0.25-0.50)
+### 1. Authentication & Role-Based Access
+- [ ] **Admin Sign-In**: Sign in with `admin@voxforensics.com` / `admin123`.
+  - Verify "Admin" badge appears in the top navigation bar.
+  - Verify access to the **Admin Dashboard**.
+- [ ] **Show/Hide Password Toggle**: Click the eye icon next to the password input field.
+  - Verify text switches from hidden (`••••••••`) to plaintext, and the icon toggles.
+- [ ] **User Sign-In**: Sign in with `user@example.com` / `user123`.
+  - Verify access to the **User Dashboard**.
+- [ ] **Email OTP Multi-Factor Authentication**:
+  - For accounts with `twoFactorEnabled === true`, verify that after entering email and password, the login halts and presents the 6-digit Email OTP entry screen.
+  - Verify the 60-second resend countdown and 10-minute expiry behavior.
+- [ ] **New Registration**: Register an account with an email address.
+  - Verify email verification notification.
+  - Test setting an optional referral code.
 
 ---
 
-### 3. **Fake Voice Detection** ✅
-
-**Test Method 1: Sample Button**
-1. Click **"Try sample: AI clone"** button (purple)
-2. Wait 2-3 seconds for analysis
-3. **Expected Result:**
-   - Verdict: "AI-Generated Voice" (purple text)
-   - Confidence: 85-98%
-   - Features show AI characteristics
-
-**Test Method 2: Upload AI Audio**
-1. Upload an AI-generated voice (from ElevenLabs, Murf, etc.)
-2. Wait for analysis
-3. **Expected Result:**
-   - Verdict: "AI-Generated Voice" (purple text)
-   - Low pitch variability (0.05-0.18)
-   - High formant stability (0.85-0.98)
+### 2. Legal Consent Modal
+- [ ] **Initial Presentation**: On first sign-in on a fresh browser profile, verify the **Voice Data Usage Agreement** modal appears.
+- [ ] **Expandable Sections**: Click on Privacy Policy, Terms of Service, and Data Storage information.
+- [ ] **Confirmation Requirement**: Verify the "I Agree" button remains disabled until the confirmation checkbox is ticked.
+- [ ] **Acceptance Persistence**: Verify consent status is saved to `localStorage` under `voxforensics_consent`.
 
 ---
 
-### 4. **Microphone Recording** ✅
+### 3. Audio Analysis via Random Forest ML Backend
 
-**Test Steps:**
-1. Click the microphone button OR "Start Recording" button
-2. Allow microphone permissions when prompted
-3. Speak for 2-5 seconds
-4. Click "Stop Recording"
-5. Wait for analysis
+#### A. File Upload Test
+1. Navigate to the **Home** or **Scanner** tab.
+2. Drag and drop or select an audio file (WAV, MP3, OGG, FLAC, M4A up to 50 MB).
+3. Verify the file size and audio player controls appear.
+4. Verify the frontend sends `POST /predict` to `http://127.0.0.1:8000/predict`.
+5. **Expected Results**:
+   - Classification verdict: **REAL** (green badge) or **FAKE / AI-GENERATED** (purple/red badge).
+   - Confidence percentage (e.g. 92.4%).
+   - Real vs. Fake probability distribution bars.
+   - Extracted acoustic metrics table (MFCCs, Spectral Centroid, Rolloff, Pitch Variability, Zero-Crossing Rate).
 
-**Expected Result:**
-- ✅ Recording button pulses red during recording
-- ✅ Visualizer bars animate in real-time
-- ✅ Timer shows recording duration
-- ✅ Analysis runs automatically after stopping
-- ✅ Results appear with verdict and confidence
+#### B. Microphone Recording Test
+1. Click the **"Start Recording"** button.
+2. Allow browser microphone access.
+3. Speak for 3–5 seconds and observe live animated waveform visualizer bars.
+4. Click **"Stop Recording"**.
+5. Verify the audio is packaged and submitted to `/predict`.
+6. Confirm analysis results render upon completion.
 
----
-
-### 5. **Navigation Tabs** ✅
-
-**Available Tabs:**
-- **Home**: Hero section with upload/record panels
-- **Scanner**: Advanced scanner interface
-- **Batch**: Upload multiple files for comparison
-- **History**: View past scans with delete option
-- **About**: Information about VoxForensics
-
-**Test Each Tab:**
-1. Click each tab in the navigation bar
-2. Verify content changes appropriately
-3. Check that all features work in each section
-4. Verify background image stays visible
+#### C. Sample Demonstrations
+1. Click **"Try sample: Real voice"** button.
+   - Verify verdict indicates Authentic/Real with high confidence.
+2. Click **"Try sample: AI clone"** button.
+   - Verify verdict indicates Synthetic/Deepfake.
 
 ---
 
-### 6. **Batch Comparison** ✅
-
-**Test Steps:**
-1. Navigate to "Batch" tab
-2. Click "Select Multiple Files"
-3. Choose 3-5 audio files (mix of real and fake)
-4. Wait for all files to process
-
-**Expected Result:**
-- ✅ Each file shows verdict (Real/Fake)
-- ✅ Confidence percentage displayed
-- ✅ Color-coded indicators (green/purple)
-- ✅ Summary statistics at bottom
-
----
-
-### 7. **Scan History** ✅
-
-**Test Steps:**
-1. Perform several scans (upload or record)
-2. Navigate to "History" tab
-3. **Expected Features:**
-   - ✅ List of all past scans
-   - ✅ Filename, timestamp, duration
-   - ✅ Verdict with confidence score
-   - ✅ Individual delete button (trash icon)
-   - ✅ "Clear All History" button
-
-**Test Delete Function:**
-1. Click trash icon on any scan → Verify it's removed
-2. Click "Clear All History" → Verify all scans are deleted
+### 4. Batch Processing Queue
+1. Click the **"Batch"** item in the top navigation bar.
+2. Click **"Select Multiple Files"** or drag multiple audio files into the dropzone.
+3. Verify files appear in the queue with `Pending` status badges.
+4. Click **"Start Batch Processing"**.
+5. **Observe**:
+   - Queue processes sequentially one file at a time without freezing the UI.
+   - Progress bar updates with percentage and active filename.
+   - Per-file status shifts from `Processing` to `Completed` (or `Error` if a file is corrupted).
+   - If an invalid file fails, subsequent files continue processing normally.
+6. **Result Verification**:
+   - Each completed item displays filename, duration, color-coded verdict badge, confidence score, and a **"PDF"** report button.
 
 ---
 
-### 8. **User Dashboard** ✅
-
-**How to Access:**
-1. Click your name in the top-right corner
-2. Dashboard opens
-
-**Features:**
-- ✅ Personal statistics (total scans, deepfakes detected)
-- ✅ Referral code with copy button
-- ✅ Recent scan history
-- ✅ Security settings (2FA status)
-
-**Test Referral System:**
-1. Copy your referral code
-2. Logout
-3. Register a new account
-4. Paste the referral code during registration
-5. Login with original account
-6. Verify referral count increased
+### 5. Forensic PDF Report Generation with Waveform
+1. In either the **Scanner** results panel or the **Batch Processing** table, click **"Download PDF"** (or **"PDF"**).
+2. The browser will instantly compile and download a PDF named `VoxForensics-Report-[filename]-[date].pdf`.
+3. Open the downloaded PDF and verify:
+   - **Branding & Header**: VoxForensics logo, Report ID, and generation timestamp.
+   - **File Metadata**: Filename, audio duration, file size.
+   - **Forensic Verdict Banner**: Prominently colored authentic or synthetic banner with confidence score.
+   - **Waveform Graph**: The actual audio waveform graph rendered visually in the document.
+   - **Acoustic Measurements**: Extracted feature values table.
+   - **Evidentiary Disclaimer**: Standard legal and forensic disclaimer.
+   - **Page Numbering**: "Page X of Y" and confidentiality mark on all pages.
 
 ---
 
-### 9. **Admin Dashboard** ✅
-
-**How to Access:**
-1. Login as admin: `admin@voxforensics.com` / `admin123`
-2. Click your name in top-right
-3. Admin dashboard opens
-
-**Features:**
-- ✅ User management (view, promote, demote, delete)
-- ✅ System analytics
-- ✅ Platform settings
-- ✅ Recent registrations
-
-**Test User Management:**
-1. View all registered users
-2. Click "Promote" to make a user admin
-3. Click "Demote" to remove admin rights
-4. Click "Delete" to remove a user
-5. Verify changes persist after refresh
+### 6. Scan History Management
+1. Navigate to the **"History"** tab in the navigation bar.
+2. Confirm all recent scans (including single and batch scans) appear with timestamp, filename, verdict, and confidence score.
+3. **Individual Deletion**: Click the trash icon on a specific scan record. Verify it is removed from the list and Firestore.
+4. **Bulk Deletion**: Click **"Clear All History"** and confirm dialog. Verify all records are wiped.
 
 ---
 
-### 10. **Background Image Effect** ✅
-
-**Visual Check:**
-1. Look at the right side of the hero section
-2. You should see a futuristic AI face
-3. The face should fade out smoothly on the left
-4. The face should fade out at the bottom
-5. Text should be readable over the image (drop shadows help)
-
-**Expected Result:**
-- ✅ AI face visible at 35% opacity
-- ✅ Gradient masking creates smooth fade
-- ✅ Content remains readable
-- ✅ Professional, modern appearance
+### 7. User Dashboard
+1. Sign in as a standard user (`user@example.com`).
+2. Click **"👤 Dashboard"** in the navigation header.
+3. Verify:
+   - Profile avatar, name, email, and "User" role badge.
+   - Total Scans and Deepfakes Detected counters.
+   - **Referral Program card**: Displays user's unique referral code (`VF-USER001`) with working "Copy" button.
+   - Security Status card showing Email OTP MFA toggle.
+   - Recent Scans list.
 
 ---
 
-## 🎯 Test Cases for AI Detection
-
-### Test Case 1: Clear Real Voice
-**Input**: Natural human speech recording
-**Expected Output**:
-- ✅ Verdict: "Real Voice"
-- ✅ Confidence: 85-95%
-- ✅ Pitch Variability: 0.25-0.50
-- ✅ Formant Stability: 0.55-0.75
-
-### Test Case 2: Clear AI Voice
-**Input**: AI-generated speech (ElevenLabs, Murf, etc.)
-**Expected Output**:
-- ✅ Verdict: "AI-Generated Voice"
-- ✅ Confidence: 85-95%
-- ✅ Pitch Variability: 0.05-0.18
-- ✅ Formant Stability: 0.85-0.98
-
-### Test Case 3: Mixed Audio
-**Input**: Real voice with AI voice in background
-**Expected Output**:
-- ✅ Verdict: "AI-Generated Voice"
-- ✅ Confidence: 70-85%
-- ✅ Detects AI presence even with real voice
-
-### Test Case 4: Low Quality Real Voice
-**Input**: Noisy recording, background music
-**Expected Output**:
-- ✅ Verdict: "Real Voice"
-- ✅ Confidence: 65-80%
-- ✅ Still identifies as real despite noise
-
-### Test Case 5: High-Quality AI Voice
-**Input**: Premium AI voice clone
-**Expected Output**:
-- ✅ Verdict: "AI-Generated Voice"
-- ✅ Confidence: 80-90%
-- ✅ Detects subtle AI artifacts
+### 8. Admin Dashboard & Secure Server-Side Deletion
+1. Sign in as the administrator (`admin@voxforensics.com` / `admin123`).
+2. Click **"👤 Dashboard"** in the navigation header.
+3. Verify:
+   - Overview metrics: Total Registered Users, Admins, Regular Users, 2FA Adoption.
+   - User Management Table populated from Firestore `/users`.
+4. **Role Toggle**:
+   - Click "Promote" or "Demote" on a test user. Confirm role updates in Firestore.
+5. **Secure Account Deletion Test (`deleteUserAccount`)**:
+   - Click "Delete" on a standard test user account.
+   - Confirm deletion prompt.
+   - Verify the Cloud Function executes successfully, deleting the user from both Firebase Authentication and Firestore.
+6. **Safety Boundary Verifications**:
+   - Verify that clicking "Delete" on the primary admin (`admin@voxforensics.com`) is rejected.
+   - Verify that self-deletion is prevented on the server side.
 
 ---
 
-## 🎨 Visual Design Checklist
-
-### Background
-- [x] AI face image visible on right side
-- [x] Gradient masking (fade on left and bottom)
-- [x] 35% opacity
-- [x] Fixed position (doesn't scroll)
-
-### Typography
-- [x] Drop shadows on all text
-- [x] Gradient text for "VoxForensics" title
-- [x] Readable over background image
-- [x] Proper contrast
-
-### Components
-- [x] Glass panels at 70% opacity
-- [x] Backdrop blur on badges and buttons
-- [x] Feature cards in 4-column grid
-- [x] Proper z-index layering
-
-### Colors
-- [x] Neon blue (#00d4ff) for primary actions
-- [x] Neon purple (#a855f7) for AI/deepfake
-- [x] Neon green (#00ff88) for real/authentic
-- [x] Dark background (#050914)
-
----
-
-## 🐛 Troubleshooting
-
-### Background Image Not Showing
-**Problem**: AI face not visible
-**Solution**:
-1. Check browser console for image loading errors
-2. Verify internet connection (image loads from Unsplash)
-3. Try hard refresh (Ctrl+Shift+R)
-4. Check browser compatibility (CSS masks require modern browser)
-
-### Text Not Readable
-**Problem**: Text hard to read over background
-**Solution**:
-1. Drop shadows should be applied automatically
-2. Check that glass panels have 70% opacity
-3. Verify z-index is set correctly
-4. Try a different browser
-
-### Login Not Working
-**Problem**: Can't login with demo accounts
-**Solution**:
-1. Clear browser localStorage
-2. Refresh the page
-3. Demo accounts are auto-created on first load
-4. Try again with exact credentials
-
-### Microphone Not Working
-**Problem**: Recording doesn't start
-**Solution**:
-1. Check browser permissions (allow microphone)
-2. Try a different browser (Chrome/Firefox recommended)
-3. Check if another app is using the microphone
-4. Refresh the page and try again
-
-### Analysis Always Shows "Real"
-**Problem**: AI voices detected as real
-**Solution**:
-1. The detection algorithm has been improved
-2. Try the "Try sample: AI clone" button
-3. Check browser console for analysis logs
-4. Clear localStorage and refresh
-
----
-
-## 📊 Performance Metrics
-
-### Load Time
-- Initial load: ~2 seconds
-- After cache: ~0.5 seconds
-- Background image: ~1 second (depends on connection)
-
-### Analysis Speed
-- File upload: Instant
-- Feature extraction: ~1-2 seconds
-- AI classification: ~1 second
-- Total analysis: ~2-3 seconds
-
-### Memory Usage
-- Base app: ~50MB
-- During recording: ~80MB
-- During analysis: ~100MB
-- After analysis: ~60MB
-
----
-
-## ✅ All Features Working
-
-### Core Features
-- ✅ User authentication (login/register)
-- ✅ Consent system (GDPR compliant)
-- ✅ Audio upload (drag & drop)
-- ✅ Microphone recording
-- ✅ Real-time waveform visualization
-- ✅ AI deepfake detection
-- ✅ Confidence scoring
-- ✅ Feature extraction (MFCC, pitch, etc.)
-- ✅ Scan history with delete
-- ✅ Batch comparison
-- ✅ User dashboard
-- ✅ Admin dashboard
-- ✅ Referral system
-- ✅ Security scanner
-- ✅ PDF report generation
-
-### Visual Features
-- ✅ AI face background image
-- ✅ Gradient masking effect
-- ✅ Drop shadows on text
-- ✅ Backdrop blur on components
-- ✅ Glassmorphism panels
-- ✅ Gradient text effects
-- ✅ Neon accent colors
-- ✅ Font Awesome icons
-- ✅ Smooth animations
-- ✅ Responsive design
-
----
-
-## 🎉 Summary
-
-The VoxForensics UI now includes:
-
-1. **Stunning Background**: AI face image with smooth gradient masking
-2. **Professional Design**: Drop shadows, backdrop blur, glass panels
-3. **Full Functionality**: All features working correctly
-4. **Accurate Detection**: Real and fake voices detected with 85-98% confidence
-5. **Complete Authentication**: Login, consent, dashboards, referrals
-6. **Modern UI/UX**: Responsive, animated, professional appearance
-
-**All features have been tested and are working correctly!** 🚀
-
----
-
-## 📁 Files Modified
-
-1. **src/components/LiveBackground.tsx** - Added AI face background with masking
-2. **src/App.tsx** - Updated with drop shadows, backdrop blur, 4-column grid
-3. **src/index.css** - Increased glass panel opacity to 70%
-4. **index.html** - Updated background color
-
----
-
-## 🚀 Quick Start
-
-1. **Open the app** → Login screen appears
-2. **Login** with demo credentials (admin@voxforensics.com / admin123)
-3. **Accept consent** → Read and agree
-4. **Test samples** → Click "Try sample: Real voice" and "Try sample: AI clone"
-5. **Upload files** → Drag & drop your own audio
-6. **Record audio** → Use microphone button
-7. **Explore tabs** → Check all navigation sections
-8. **View dashboard** → Click your name
-9. **Test history** → Delete individual items or clear all
-10. **Enjoy the design** → Admire the AI face background!
-
----
-
-**Everything is tested and working! The design now matches the HTML template perfectly with the AI face background, drop shadows, and enhanced visual effects.** 🎨✨
+### 9. 3D Visual Experience
+1. Open the application on a desktop browser with hardware acceleration enabled.
+2. Verify the 3D Three.js particle face silhouette is visible in the background.
+3. Observe smooth 60 FPS animation: particle breathing, gentle rotation, and glowing sine waves across the viewport base.
+4. Verify high-contrast text readability across glassmorphic cards.

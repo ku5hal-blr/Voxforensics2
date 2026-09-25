@@ -35,6 +35,7 @@ import UserDashboard from './components/UserDashboard';
 import E2ETestPanel from './components/E2ETestPanel';
 import LiveBackground from './components/LiveBackground';
 import BatchProcessing from './components/BatchProcessing';
+import { generateAnalysisPDF } from './utils/generateAnalysisPDF';
 
 /*
  * ============================================================
@@ -1564,7 +1565,10 @@ function AppContent() {
                   : `The Random Forest machine learning model classified this recording as a real voice with ${(
                     Number(mlResult.real_probability) * 100
                   ).toFixed(1)}% model probability.`,
-            };
+
+              realProbability: Number(mlResult.real_probability) * 100,
+              fakeProbability: Number(mlResult.fake_probability) * 100,
+            } as any;
 
             /*
              * ----------------------------------------------------
@@ -1827,6 +1831,26 @@ function AppContent() {
         stopAudioPlayback,
       ]
     );
+
+  /*
+   * ------------------------------------------------------------
+   * DOWNLOAD ANALYSIS PDF REPORT
+   * ------------------------------------------------------------
+   */
+
+  const handleDownloadPDF = (result: AnalysisResult | null) => {
+    if (!result) return;
+    try {
+      const activeFilename =
+        audioFile?.name ||
+        recordedAudioFile?.name ||
+        'analysis_recording.wav';
+      generateAnalysisPDF(result, activeFilename, waveformData);
+    } catch (err: any) {
+      console.error('PDF export error:', err);
+      alert('Unable to generate the PDF report. Please try again.');
+    }
+  };
 
   /*
    * ------------------------------------------------------------
@@ -3907,6 +3931,15 @@ function AppContent() {
                         </div>
 
                         <button
+                          type="button"
+                          onClick={() => handleDownloadPDF(currentResult)}
+                          className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-[#00d4ff]/20 via-[#6366f1]/20 to-[#a855f7]/20 hover:from-[#00d4ff]/30 hover:via-[#6366f1]/30 hover:to-[#a855f7]/30 border border-[#00d4ff]/40 text-white font-medium text-xs flex items-center justify-center gap-2 transition shadow-[0_0_12px_rgba(0,212,255,0.12)] cursor-pointer"
+                        >
+                          <i className="fa-solid fa-file-pdf text-[#00d4ff]"></i>
+                          Download PDF
+                        </button>
+
+                        <button
                           onClick={() => {
                             stopAudioPlayback();
 
@@ -4434,7 +4467,15 @@ function AppContent() {
 
                       </div>
 
-                      {/* ACTION */}
+                      {/* DOWNLOAD PDF ACTION */}
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadPDF(currentResult)}
+                        className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-[#00d4ff]/20 via-[#6366f1]/20 to-[#a855f7]/20 hover:from-[#00d4ff]/30 hover:via-[#6366f1]/30 hover:to-[#a855f7]/30 border border-[#00d4ff]/40 text-white font-medium text-sm flex items-center justify-center gap-2 transition shadow-[0_0_15px_rgba(0,212,255,0.15)] cursor-pointer"
+                      >
+                        <i className="fa-solid fa-file-pdf text-[#00d4ff] text-base"></i>
+                        Download PDF
+                      </button>
 
                       <button
                         onClick={() => {

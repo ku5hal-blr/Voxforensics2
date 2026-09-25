@@ -2,329 +2,225 @@
 
 **AI-Powered Deepfake Audio Detection & Forensic Analysis System**
 
-![VoxForensics](https://img.shields.io/badge/version-3.2.1-blue)
+![VoxForensics](https://img.shields.io/badge/version-3.5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![React](https://img.shields.io/badge/React-18.3.1-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688)
+![Firebase](https://img.shields.io/badge/Firebase-v10-FFCA28)
 ![Three.js](https://img.shields.io/badge/Three.js-0.175-black)
 
 ---
 
 ## 🌟 Overview
 
-VoxForensics is a cutting-edge web application that uses advanced AI algorithms to detect deepfake audio in real-time. Built with React, TypeScript, and Three.js, it provides a comprehensive forensic analysis toolkit with a stunning 3D interface.
-
-### ✨ Key Features
-
-- 🎙️ **Microphone Recording** - Record audio directly in your browser
-- 📁 **File Upload** - Upload audio files for analysis
-- 🌊 **Waveform Visualization** - Real-time audio waveform display
-- 🔬 **Mel-Spectrogram** - Advanced spectral analysis
-- 📈 **Acoustic Feature Analysis** - Pitch, formants, harmonics, and more
-- 🤖 **AI Model Prediction** - Deepfake detection with confidence scores
-- 🧠 **Model Explanation (XAI)** - Understand why AI made its decision
-- 📋 **Forensic Reports** - Detailed analysis reports
-- 🕒 **Scan History** - Track all your analyses
-- 📦 **Batch Comparison** - Compare multiple audio files
-- 📥 **PDF Export** - Download professional reports
-- 🎯 **Confidence Indicators** - Visual confidence/uncertainty display
-- 🛡️ **Security Scanner** - File validation before processing
-- 🔒 **Privacy First** - Client-side only processing, GDPR compliant
+**VoxForensics** is a comprehensive, production-ready audio forensic system engineered to detect synthetic and AI-generated voices (deepfakes). Combining a modern React & TypeScript interface with a trained **Random Forest Machine Learning backend** and **Firebase Cloud Infrastructure**, VoxForensics delivers forensic verification, real-time audio visualization, batch processing, and evidentiary PDF reporting.
 
 ---
 
-## 🚀 Quick Start
+## ✨ Key Features
+
+- 🤖 **Random Forest ML Detection**: High-accuracy deepfake detection powered by a trained Random Forest model (`models/random_forest_model.pkl`) and FastAPI backend (`ml/api.py`).
+- 🔬 **48 Acoustic Features**: Comprehensive feature extraction including MFCCs, spectral centroid, spectral rolloff, spectral flux, zero-crossing rate, pitch variability, and harmonicity.
+- 🎙️ **Microphone Recording**: Direct in-browser microphone recording with real-time waveform visualizer bars and simulated fallback.
+- 📁 **Audio Upload Support**: Drag-and-drop or file picker upload supporting WAV, MP3, OGG, FLAC, and M4A up to 50 MB.
+- 📦 **Batch Processing**: Dedicated top-level tab for queuing multiple audio files with sequential non-blocking analysis, live progress tracking, and per-file PDF downloads.
+- 📄 **Forensic PDF Reports**: Client-side PDF generation using jsPDF featuring branded headers, verdict banners, confidence bars, acoustic tables, evidentiary disclaimers, and **embedded audio waveforms**.
+- 🔐 **Firebase Authentication & MFA**:
+  - Email and password authentication with email verification.
+  - Application-level **Email OTP Two-Factor Authentication (MFA)** with cryptographically secure random codes, SHA-256 salted hashing, 10-minute expiry, 60-second resend cooldown, and 5-attempt limits.
+  - Show/Hide Password eye toggle on authentication forms.
+- 👑 **Role-Based Access & Dashboards**:
+  - **Admin Dashboard**: System analytics, registered user management, role toggles, and secure account deletion.
+  - **User Dashboard**: Personal scan statistics, referral code sharing, security status, and scan history.
+- 🛡️ **Secure Cloud Functions**: Dedicated callable Firebase Cloud Function (`deleteUserAccount` in `us-central1`) using Firebase Admin SDK with server-side admin verification, self-deletion prevention, and primary admin account protection (`admin@voxforensics.com`).
+- 🕒 **Scan History**: Full persistent history tracking in Firestore with local caching and individual/bulk deletion.
+- 🎁 **Referral Program**: Unique referral codes (`VF-XXXXXX`) tracked across user profiles.
+- 📋 **Legal Consent System**: Simplified GDPR/BIPA compliant agreement modal with single-checkbox confirmation and expandable policy sections.
+- 🌌 **Cyberpunk 3D Visuals**: Three.js particle face silhouette, glowing sine wave visualizers, and glassmorphic UI components.
+
+---
+
+## 🏗️ System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VoxForensics Frontend                        │
+│             React 18 + TypeScript + Vite + Three.js             │
+│        (Home • Scanner • Batch • History • User/Admin Dash)     │
+└──────────────┬──────────────────────────────────┬───────────────┘
+               │ (Audio Payload / multipart)      │ (Auth / Scans / Roles)
+               ▼                                  ▼
+┌───────────────────────────────┐  ┌──────────────────────────────┐
+│       ML Backend API          │  │       Firebase Backend       │
+│     FastAPI + Python 3.10+    │  │  Firebase Auth (Email/Pass)  │
+│  Endpoint: POST /predict      │  │  Firestore Database          │
+│  ├─ librosa & soundfile       │  │  ├─ /users                   │
+│  ├─ 48 Acoustic Features      │  │  ├─ /scans                   │
+│  └─ Random Forest Classifier  │  │  ├─ /email_otp_sessions      │
+│     (random_forest_model.pkl) │  │  └─ /mail (Trigger Email)    │
+└───────────────────────────────┘  │  Cloud Functions             │
+                                   │  └─ deleteUserAccount        │
+                                   └──────────────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start (Local Development)
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm or yarn
+- **Node.js**: 20+ installed
+- **npm**: 9+ installed
+- **Python**: 3.10+ with `venv`
+- **FFmpeg**: Installed and accessible in system PATH (required for audio conversion)
 
-### Installation
+---
+
+### Step 1: Start the Machine Learning Backend
+
+The ML API runs on FastAPI and handles feature extraction and Random Forest model inference.
 
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/voxforensics.git
+# Navigate to the project root
+cd Voxforensics2-1
 
-# Navigate to project
-cd voxforensics
+# Activate the existing virtual environment (Windows PowerShell)
+.\ml\.venv\Scripts\Activate.ps1
 
-# Install dependencies
+# Start the FastAPI server using Uvicorn
+python -m uvicorn ml.api:app --reload --port 8000
+```
+
+The API will be available at: `http://127.0.0.1:8000`  
+Interactive Swagger docs: `http://127.0.0.1:8000/docs`
+
+---
+
+### Step 2: Start the Frontend Application
+
+In a separate terminal window:
+
+```bash
+# Install frontend dependencies (if not already installed)
 npm install
 
-# Start development server
+# Start the Vite development server
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+The application will be accessible at: `http://localhost:3000`
 
-### Build for Production
+---
+
+### Step 3: Firebase Cloud Functions (Optional / Maintenance)
+
+The Cloud Functions package is configured in `functions/`:
 
 ```bash
+cd functions
+npm install
 npm run build
 ```
 
-The built files will be in the `dist/` folder.
+---
+
+## 👥 Demonstration Accounts
+
+For academic, demonstration, and evaluation purposes, the following pre-configured Firebase Authentication credentials are available:
+
+| Account Type | Email | Password | Access Privileges |
+| :--- | :--- | :--- | :--- |
+| **Administrator** | `admin@voxforensics.com` | `admin123` | Full access: User management, Cloud Function deletions, system analytics |
+| **Standard User** | `user@example.com` | `user123` | User access: Audio scanning, Batch processing, History, Referral program |
+
+*(See [LOGIN_CREDENTIALS.md](file:///c:/Users/Administrator/Desktop/vox/Voxforensics2-1/LOGIN_CREDENTIALS.md) for full testing instructions.)*
 
 ---
 
-## 🎯 Usage
-
-### First Time Setup
-
-1. **Accept Consent** - Read and accept the voice data usage agreement
-2. **Choose Input Method**:
-   - 🎙️ Record from microphone
-   - 📁 Upload an audio file
-   - 🧪 Try sample real/fake audio
-
-### Analysis Flow
-
-1. **Input** - Provide audio via recording or upload
-2. **Security Scan** - Automatic file validation
-3. **Processing** - AI extracts acoustic features
-4. **Analysis** - Deepfake detection algorithm runs
-5. **Results** - View detection with confidence scores
-6. **Report** - Download PDF or view full analysis
-
----
-
-## 🔒 Privacy & Security
-
-### 🛡️ Security Features
-
-- ✅ **File Validation** - Scans for malware and corruption
-- ✅ **Type Checking** - Validates audio file formats
-- ✅ **Size Limits** - Prevents oversized uploads
-- ✅ **Signature Verification** - Checks file integrity
-
-### 🔐 Privacy Guarantees
-
-- ✅ **Client-Side Only** - All processing in your browser
-- ✅ **No Server Storage** - Voice data never leaves your device
-- ✅ **GDPR Compliant** - Full data protection compliance
-- ✅ **BIPA Compliant** - Biometric privacy protection
-- ✅ **User Control** - Delete all data anytime
-
-### 📦 Data Storage
-
-| Data Type | Location | Duration |
-|-----------|----------|----------|
-| Uploaded Files | Browser RAM | During processing only |
-| Recordings | Browser RAM | During session only |
-| Analysis History | localStorage | Until you delete it |
-| Consent Data | localStorage | Until you revoke |
-
-**Important**: No voice data is ever uploaded to servers or stored permanently.
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **Three.js** - 3D graphics
-- **React Three Fiber** - React integration for Three.js
-
-### Audio Processing
-- **Web Audio API** - Audio analysis
-- **Custom Algorithms** - Acoustic feature extraction
-
-### Tools & Libraries
-- **Vite** - Build tool
-- **jsPDF** - PDF generation
-- **ESLint** - Code quality
-
----
-
-## 📊 How It Works
-
-### Detection Algorithm
-
-1. **Audio Input** - User records or uploads audio
-2. **Feature Extraction**:
-   - Pitch variability analysis
-   - Formant stability measurement
-   - Spectral flatness calculation
-   - Harmonic ratio detection
-   - Temporal modulation analysis
-   - Zero-crossing rate
-   - Spectral centroid
-
-3. **AI Analysis** - Multi-factor scoring algorithm:
-   ```
-   Deepfake Score = Σ(feature_weights × indicators)
-   Real Score = Σ(feature_weights × indicators)
-   
-   Verdict = Deepfake Score > threshold ? "DEEPFAKE" : "REAL"
-   ```
-
-4. **Results** - Confidence scores and explanations
-
-### Acoustic Features Analyzed
-
-| Feature | Real Voice | AI Voice |
-|---------|-----------|----------|
-| Pitch Variability | 0.25-0.50 | 0.05-0.18 |
-| Formant Stability | 0.55-0.75 | 0.85-0.98 |
-| Spectral Flatness | 0.02-0.05 | 0.06-0.15 |
-| Harmonic Ratio | 0.75-0.92 | 0.50-0.72 |
-| Temporal Modulation | 0.50-0.85 | 0.20-0.45 |
-
----
-
-## 🧪 Testing
-
-### E2E Test Suite
-
-The app includes a comprehensive test suite with 10 test cases:
-
-1. ✅ Clear AI voice detection
-2. ✅ Clear real voice detection
-3. ✅ AI voice via speaker playback
-4. ✅ Mixed audio (real + AI background)
-5. ✅ Borderline real voice
-6. ✅ High-quality AI voice
-7. ✅ Real voice with background music
-8. ✅ AI voice with audio effects
-9. ✅ Quiet real voice
-10. ✅ Advanced AI mimicking natural speech
-
-**Run Tests**: Click the "🧪 E2E Tests" button in the app
-
----
-
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```
-voxforensics/
+Voxforensics2-1/
 ├── src/
 │   ├── components/
-│   │   ├── LiveBackground.tsx      # 3D animated background
-│   │   ├── SecurityScanner.tsx     # File security validation
-│   │   ├── ConsentModal.tsx        # Legal consent system
-│   │   └── E2ETestPanel.tsx        # Test suite UI
+│   │   ├── AdminDashboard.tsx       # Administrator user management & analytics
+│   │   ├── AuthSystem.tsx           # Authentication, registration & Email OTP MFA
+│   │   ├── BatchProcessing.tsx      # Multi-file batch queue & PDF generation
+│   │   ├── ConsentModal.tsx         # Legal biometric & GDPR consent modal
+│   │   ├── LiveBackground.tsx       # 3D Three.js particle face & wave background
+│   │   └── UserDashboard.tsx        # Profile stats, referrals & security settings
+│   ├── services/
+│   │   ├── emailOtp.ts              # Cryptographic Email OTP generation & hashing
+│   │   └── history.ts               # Firestore scan history management & caching
 │   ├── utils/
-│   │   ├── analysis.ts             # AI detection algorithms
-│   │   └── testSuite.ts            # Comprehensive tests
-│   ├── App.tsx                      # Main application
-│   ├── main.tsx                     # Entry point
-│   └── index.css                    # Global styles
-├── public/                          # Static assets
-├── index.html                       # HTML template
-├── package.json                     # Dependencies
+│   │   ├── analysis.ts              # Client-side audio processing & legacy DSP utilities
+│   │   └── generateAnalysisPDF.ts   # Client-side jsPDF generator with waveform
+│   ├── App.tsx                      # Primary application controller & tab router
+│   ├── firebase.ts                  # Firebase client SDK initialization
+│   ├── index.css                    # Design system styles & glassmorphic classes
+│   └── main.tsx                     # Application React DOM root
+├── functions/
+│   ├── src/
+│   │   └── index.ts                 # deleteUserAccount Cloud Function (Node 20)
+│   ├── package.json                 # Firebase Functions dependencies
+│   └── tsconfig.json                # Functions TypeScript configuration
+├── ml/
+│   ├── .venv/                       # Python virtual environment
+│   ├── api.py                       # FastAPI application & /predict endpoint
+│   ├── predict.py                   # Feature extraction & model inference logic
+│   └── requirements.txt             # Python ML dependencies
+├── models/
+│   └── random_forest_model.pkl      # Trained Random Forest deepfake detection model
+├── public/                          # Static public web assets
+├── firestore.rules                  # Firestore security rules
+├── package.json                     # Frontend npm dependencies & build scripts
 ├── vite.config.ts                   # Vite configuration
-├── .gitignore                       # Git ignore rules
-└── README.md                        # This file
+└── README.md                        # Primary project documentation
 ```
 
 ---
 
-## 🎨 Design System
+## 🔬 How Audio Analysis Works
 
-### Theme
-- **Base**: Deep space dark (#030712)
-- **Primary**: Neon Cyan (#00F2FE)
-- **Secondary**: Vivid Purple (#7F00FF)
-- **Accent**: Red (#FF0055), Green (#00FF88)
-
-### Visual Effects
-- **3D Background**: Animated particle face silhouette
-- **Glassmorphic Cards**: Backdrop blur with subtle borders
-- **Neon Buttons**: Glowing hover effects
-- **Waveform Visualization**: Real-time canvas rendering
-- **Spectrogram**: Color-coded frequency analysis
+1. **Audio Input**: User uploads a file (up to 50 MB) or records voice via browser microphone.
+2. **Audio Decoding**: Web Audio API decodes audio into an in-memory `AudioBuffer` for real-time waveform display.
+3. **ML Inference**: The audio file is submitted via multipart `FormData` to the FastAPI backend at `http://127.0.0.1:8000/predict`.
+4. **Feature Extraction (`ml/predict.py`)**:
+   - 48 distinct acoustic properties extracted via `librosa` and `soundfile`.
+   - MFCCs (coefficients 1–13, means, and standard deviations).
+   - Spectral Centroid, Rolloff, Flux, and Flatness.
+   - Zero-Crossing Rate (ZCR) and RMS Energy.
+   - Fundamental Frequency (F0/pitch) statistics and Harmonic-to-Noise Ratio (HNR).
+5. **Random Forest Classification**: Extracted features are evaluated by `models/random_forest_model.pkl`.
+6. **Verdict & Probabilities**:
+   - Binary Classification: `REAL` vs `FAKE`.
+   - Confidence score percentage (0–100%).
+   - Class probabilities (`real` vs `fake`).
+7. **Reporting & Persistence**:
+   - Analysis results automatically saved to Firestore `/scans`.
+   - Instant client-side PDF export with embedded waveform visualization.
 
 ---
 
-## 🤝 Contributing
+## 🚢 Upcoming Production Deployment Plan
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+The current setup operates locally. The production deployment plan involves:
 
-### How to Contribute
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-### Code Style
-
-- Use TypeScript
-- Follow existing code patterns
-- Add comments for complex logic
-- Write meaningful commit messages
-- Test thoroughly before submitting
+1. **Deploy ML Backend to Google Cloud Run**:
+   - Containerize `ml/` with Docker.
+   - Deploy container to Google Cloud Run (HTTPS endpoint).
+2. **Configure Frontend Production Environment**:
+   - Configure `VITE_ML_API_URL` pointing to the secure Cloud Run service.
+3. **Deploy Firebase Cloud Functions**:
+   - Deploy `deleteUserAccount` to Firebase (`firebase deploy --only functions`).
+4. **Deploy Frontend Web Application**:
+   - Build via `npm run build` and deploy to Firebase Hosting or Google Cloud Run.
+5. **Authorize Production Domains**:
+   - Register production domain in Firebase Authentication Console.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **Three.js** community for 3D graphics inspiration
-- **React Three Fiber** for React integration
-- **Voice AI research** community
-- **Open source** contributors
-
----
-
-## 📞 Support & Contact
-
-- **Issues**: Open a GitHub issue for bugs or feature requests
-- **Questions**: Check the documentation first
-- **Security**: Report security issues privately
-
----
-
-## 🌟 Star History
-
-If you find this project useful, please consider giving it a star ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=YOUR_USERNAME/voxforensics&type=Date)](https://star-history.com/#YOUR_USERNAME/voxforensics)
-
----
-
-## 🚀 Roadmap
-
-- [ ] Real-time streaming analysis
-- [ ] Multi-language support
-- [ ] Mobile app version
-- [ ] API for third-party integration
-- [ ] Advanced ML models
-- [ ] Voice cloning detection
-- [ ] Audio enhancement tools
-
----
-
-## 📊 Performance
-
-- **Analysis Time**: ~2-3 seconds
-- **Memory Usage**: ~50MB during processing
-- **Browser Support**: Chrome, Firefox, Safari, Edge (latest)
-- **Responsive**: Mobile, tablet, desktop
-
----
-
-## 🔐 Compliance
-
-- ✅ **GDPR** (EU General Data Protection Regulation)
-- ✅ **CCPA** (California Consumer Privacy Act)
-- ✅ **BIPA** (Illinois Biometric Information Privacy Act)
-- ✅ **COPPA** (Children's Online Privacy Protection Act)
-- ✅ **TCPA** (Telephone Consumer Protection Act)
-
----
-
-**Made with ❤️ for a safer digital world**
-
----
-
-*VoxForensics v3.2.1 | AI Deepfake Audio Detection System*
+This project is licensed under the MIT License - see the `LICENSE` file for details.

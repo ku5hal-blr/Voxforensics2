@@ -1,237 +1,73 @@
-# VoxForensics - Security, Consent & Storage Features
+# 🌟 VoxForensics - Complete System Features Summary
 
-## ✅ What's Been Added
-
-### 1. 🛡️ Security Scanner
-**Location**: Appears automatically when you upload a file
-
-**Features**:
-- ✅ File size validation (max 50MB)
-- ✅ File type checking (audio formats only)
-- ✅ Executable file detection (blocks .exe, .bat, .sh)
-- ✅ Audio signature verification (WAV, MP3, OGG, WebM)
-- ✅ Suspicious filename detection
-- ✅ Corrupted file detection
-- ✅ Real-time scan results with threats/warnings
-
-**How It Works**:
-1. Upload a file
-2. Security scanner automatically runs
-3. Shows green ✅ if safe, red ❌ if threats detected
-4. Lists specific issues found
-5. Only processes file if scan passes
+This document outlines the complete set of features currently active in the VoxForensics application.
 
 ---
 
-### 2. 📋 Voice Data Consent System
-**Location**: Appears on first use (before you can access the app)
+## 🚀 Feature Matrix
 
-**What You Must Consent To**:
-
-#### ⭐ Required Consents (All 6):
-
-1. **Voice Data Collection** - Permission to process your voice for deepfake detection
-2. **Data Processing** - Agreement to AI analysis of acoustic features
-3. **Biometric Consent (BIPA/GDPR)** - Explicit consent for voice biometrics
-4. **Privacy Policy** - Acknowledgment of data handling practices
-5. **Terms of Service** - Agreement to usage terms and restrictions
-6. **Age Verification** - Confirm you're 18+ or have parental consent
-
-**Legal Compliance**:
-- ✅ GDPR (EU)
-- ✅ CCPA (California)
-- ✅ BIPA (Illinois Biometric Privacy)
-- ✅ COPPA (Children's Privacy)
-- ✅ TCPA (Telephone Consumer Protection)
-
-**Features**:
-- Must accept ALL consents to use the app
-- Can decline (but then can't use the service)
-- Consent stored in browser (localStorage)
-- Can revoke consent anytime
-- Includes detailed privacy information
+| Feature | Subsystem | Description | Location / File |
+| :--- | :--- | :--- | :--- |
+| **Random Forest ML Audio Detection** | ML Backend | Predicts Authentic (`REAL`) vs Deepfake (`FAKE`) using a trained model with 48 acoustic features | `ml/api.py`, `models/random_forest_model.pkl` |
+| **FastAPI REST API** | ML Backend | High-performance Python backend serving inference at `/predict` | `ml/api.py` |
+| **Audio File Upload** | Frontend | Drag & drop or file selector supporting WAV, MP3, OGG, FLAC, M4A up to 50 MB | `src/App.tsx` |
+| **Microphone Voice Recording** | Frontend | Live browser audio capture with real-time waveform visualization bars | `src/App.tsx` |
+| **Batch Processing** | Frontend / ML | Dedicated tab for queuing multiple audio files, sequential analysis, and per-file PDF generation | `src/components/BatchProcessing.tsx` |
+| **Forensic PDF Reports with Waveform** | Forensic Reporting | Client-side jsPDF report generator embedding audio waveform graphics, acoustic metrics, and legal disclaimers | `src/utils/generateAnalysisPDF.ts` |
+| **Firebase Authentication** | Auth & Identity | Secure user registration, email/password login, and session persistence | `src/components/AuthSystem.tsx`, `src/firebase.ts` |
+| **Email Verification** | Auth & Identity | Mandatory verification link for new user registrations via Firebase Auth | `src/components/AuthSystem.tsx` |
+| **Email OTP Multi-Factor Authentication** | Auth & Security | Cryptographically secure 6-digit OTP MFA with salted SHA-256 hashing, 10m expiry, and 60s cooldown | `src/services/emailOtp.ts` |
+| **Password Visibility Toggle** | Frontend / UX | Eye icon toggle allowing users to view/hide entered passwords | `src/components/AuthSystem.tsx` |
+| **Admin Dashboard** | Administration | View registered users, manage user roles (promote/demote), view system stats | `src/components/AdminDashboard.tsx` |
+| **Secure Admin User Deletion** | Cloud Functions | Callable Cloud Function `deleteUserAccount` using Firebase Admin SDK with primary admin protection | `functions/src/index.ts` |
+| **User Dashboard** | User Profile | View personal scan metrics, recent scan history, and security settings | `src/components/UserDashboard.tsx` |
+| **Referral System** | Growth & Tracking | Unique user referral codes (`VF-XXXXXX`) tracked during registration | `src/components/UserDashboard.tsx` |
+| **Scan History** | Data Persistence | Persistent record of audio scans stored in Firestore `/scans` with local caching and deletion | `src/services/history.ts` |
+| **Legal Consent System** | Compliance | Single-confirmation checkbox with expandable policies compliant with GDPR and BIPA | `src/components/ConsentModal.tsx` |
+| **3D Cyberpunk Background** | Visuals / UI | Interactive Three.js particle face silhouette with animated glowing wave visualizers | `src/components/LiveBackground.tsx` |
 
 ---
 
-### 3. 📦 Storage Information Panel
-**Location**: Bottom of main page, above footer
+## 🔬 In-Depth Subsystem Descriptions
 
-**Shows**:
-- 📊 **Data Storage Info**
-  - All processing in browser
-  - No files uploaded to servers
-  - History in localStorage only
-  - Data never leaves device
+### 1. Audio Deepfake Detection Pipeline
+- **Input Formats**: Accepts `.wav`, `.mp3`, `.ogg`, `.flac`, and `.m4a` files up to **50 MB**.
+- **Preprocessing**: Normalizes audio sampling to 16 kHz mono.
+- **Feature Extraction**: Extracts 48 acoustic parameters (MFCCs, spectral centroid, spectral rolloff, spectral flux, zero-crossing rate, pitch variability, and harmonicity).
+- **Classification**: Evaluated by `models/random_forest_model.pkl` to compute class probabilities.
+- **Output**: Returns verdict (`REAL` or `FAKE`), confidence score (0–100%), and granular probability distributions.
 
-- 🛡️ **Security Info**
-  - Files scanned before processing
-  - File type/size validation
-  - Signature verification
-  - No external network requests
+### 2. Batch Audio Processing
+- Top-level **"Batch"** navigation tab.
+- Supports multi-file selection or multi-file drag-and-drop.
+- **Sequential Queue**: Processes files sequentially through the ML backend to prevent memory spikes.
+- **Error Isolation**: Corrupt or unreadable files produce an error status for that specific file without halting the remaining queue.
+- **Live Progress**: Progress bar displaying overall completion percentage and active processing item.
+- **Individual PDF Generation**: Users can download an evidentiary PDF report for any completed file in the batch results table.
 
-**Action Buttons**:
-- 🔐 **Revoke Consent & Clear Data** - Deletes everything, requires re-consent
-- 📊 **View Storage Details** - Shows exact storage usage
+### 3. Evidentiary Forensic PDF Reports
+- Generated completely client-side in the browser using `jspdf`.
+- **Branded Design**: Clean dark header with VoxForensics identity and unique Report ID.
+- **Embedded Audio Waveform**: Renders the actual audio waveform graph directly into the PDF document.
+- **Acoustic Metrics**: Detailed table of extracted acoustic features and metrics.
+- **Summary & Diagnostics**: Technical observations describing why the voice was classified as authentic or synthetic.
+- **Evidentiary Disclaimer**: Formal statement clarifying analytical limitations for legal compliance.
+- **Pagination**: Professional page numbers ("Page X of Y") and confidentiality notices.
 
----
+### 4. Authentication, MFA & User Management
+- Built on **Firebase Authentication** with real-time auth state synchronization.
+- **Application-Level Email OTP**:
+  - Secure randomness: `crypto.getRandomValues()`.
+  - Salted SHA-256 hash storage before verification.
+  - 10-minute expiration and 60-second resend cooldown.
+  - Max 5 failed verification attempts before invalidation.
+- **Admin Security**:
+  - Protected primary administrator (`admin@voxforensics.com`).
+  - Server-side validation via Cloud Function `deleteUserAccount` in region `us-central1`.
+  - Self-deletion is prevented on the server side.
 
-## 📍 Where Files Are Stored
-
-### ❌ NOT Stored (Anywhere):
-- Uploaded audio files
-- Recorded audio
-- Voice data
-- Personal information
-
-### ✅ Stored Locally (Your Browser Only):
-
-#### 1. **Uploaded Files**
-- **Where**: Browser memory (RAM)
-- **How Long**: Only during processing (seconds)
-- **After Processing**: Deleted immediately
-- **Network**: Never transmitted
-
-#### 2. **Recordings**
-- **Where**: Browser memory via MediaRecorder
-- **How Long**: Only during session
-- **After Processing**: Deleted immediately
-- **Network**: Never transmitted
-
-#### 3. **Analysis History**
-- **Where**: `localStorage` (your browser)
-- **Key**: `voxforensics_history`
-- **What's Stored**: Metadata only (filename, timestamp, results)
-- **NOT Stored**: Actual audio files
-- **Size**: ~50KB for 10 scans
-- **Persistence**: Until you delete it
-
-#### 4. **Consent Data**
-- **Where**: `localStorage` (your browser)
-- **Key**: `voxforensics_consent`
-- **What's Stored**: Your consent choices + timestamp
-- **Size**: ~0.5KB
-- **Persistence**: Until you revoke consent
-
----
-
-## 🔒 Privacy Guarantees
-
-### ✅ What We Do:
-- Process everything in your browser
-- Scan files for security before processing
-- Store only metadata (not audio)
-- Give you full control to delete data
-- Comply with privacy laws (GDPR, BIPA, etc.)
-
-### ❌ What We DON'T Do:
-- Upload files to servers
-- Store audio data
-- Send data to third parties
-- Track your usage
-- Collect personal information
-- Keep data after you delete it
-
----
-
-## 🎯 How to Use
-
-### First Time Setup:
-1. Open VoxForensics
-2. **Consent Modal appears** - Read and accept all 6 consents
-3. Click "✅ Accept & Continue"
-4. You can now use the app
-
-### Uploading Files:
-1. Click "📁 Choose File"
-2. Select audio file
-3. **Security Scanner runs automatically**
-4. If safe ✅ → File processes
-5. If threats ❌ → Shows issues, blocks processing
-
-### Managing Your Data:
-1. Scroll to bottom of page
-2. See **Privacy & Security Information** panel
-3. Click "📊 View Storage Details" to see usage
-4. Click "🔐 Revoke Consent & Clear Data" to delete everything
-
-### Deleting History:
-- **Individual items**: Go to History tab → Click 🗑️ Delete on each item
-- **All history**: Go to History tab → Click 🗑 Clear All
-- **Everything**: Click 🔐 Revoke Consent & Clear Data at bottom
-
----
-
-## 📊 Storage Usage Example
-
-**After 10 scans:**
-```
-localStorage:
-├── Consent data: 0.5 KB
-├── History (10 items): 50 KB
-└── Total: 50.5 KB
-
-Browser Memory (temporary):
-├── During file processing: ~2 MB
-└── After processing: 0 KB (deleted)
-```
-
----
-
-## 🛡️ Security Features
-
-### File Validation:
-- ✅ Size check (max 50MB)
-- ✅ Type check (audio only)
-- ✅ Signature verification
-- ✅ Executable detection
-- ✅ Corruption detection
-- ✅ Suspicious name detection
-
-### Data Protection:
-- ✅ Client-side only processing
-- ✅ No server storage
-- ✅ No network transmission
-- ✅ User-controlled deletion
-- ✅ Consent management
-- ✅ Privacy compliance
-
----
-
-## 🆘 Common Questions
-
-**Q: Where are my files stored?**
-A: Nowhere permanently. Files exist only in your browser's memory during processing (seconds), then are deleted. Only metadata (results) is saved in localStorage.
-
-**Q: Can other people access my data?**
-A: No. Data is stored in your browser's localStorage, which is isolated to your device and browser.
-
-**Q: What happens if I clear my browser?**
-A: All VoxForensics data is deleted. You'll need to accept consent again.
-
-**Q: Is this legal?**
-A: Yes. We comply with GDPR, BIPA, CCPA, COPPA, and TCPA. Voice is biometric data and requires explicit consent, which we obtain.
-
-**Q: Can I delete my data?**
-A: Yes! Three ways:
-1. Delete individual items in History tab
-2. Clear all history with "Clear All" button
-3. Revoke consent with "🔐 Revoke Consent & Clear Data"
-
-**Q: Do you store my voice?**
-A: No. We only store analysis results (metadata). Your actual voice recording is processed in memory and immediately deleted.
-
-**Q: Is my data sent to servers?**
-A: No. Zero network requests. Everything happens in your browser.
-
----
-
-## 📝 Summary
-
-✅ **Security Scanner** - Validates files before processing
-✅ **Consent System** - Legal compliance with 6 required consents
-✅ **Storage Info** - Clear transparency about data handling
-✅ **Privacy First** - Client-side only, no server storage
-✅ **User Control** - Full data deletion capabilities
-✅ **Legal Compliance** - GDPR, BIPA, CCPA, COPPA, TCPA
-
-**Your voice data is safe, secure, and under your control.**
+### 5. Legal & Biometric Consent System
+- Streamlined modal appearing on first use.
+- Requires user to tick: *"I confirm that I have read and understood the above information"*.
+- Expandable legal policies covering Voice Data Usage, Privacy Policy, Terms of Service, and Data Storage.
+- Consent is recorded in `localStorage` under `voxforensics_consent`.

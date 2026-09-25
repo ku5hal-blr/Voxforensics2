@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import type { AnalysisResult } from '../utils/analysis';
 import { saveUserScanToHistory } from '../services/history';
 import type { User } from './AuthSystem';
+import { generateAnalysisPDF } from '../utils/generateAnalysisPDF';
 
 /* ============================================================
  * BATCH PROCESSING TYPES
@@ -254,7 +255,9 @@ export default function BatchProcessing({
           explanation: isFake
             ? `The Random Forest machine learning model classified this recording as AI-generated with ${(fakeProb * 100).toFixed(1)}% probability.`
             : `The Random Forest machine learning model classified this recording as a real voice with ${(realProb * 100).toFixed(1)}% probability.`,
-        };
+          realProbability: realProb * 100,
+          fakeProbability: fakeProb * 100,
+        } as any;
 
         // Save scan to user Firestore history if authenticated
         if (user?.id) {
@@ -683,14 +686,36 @@ export default function BatchProcessing({
 
                       {/* ACTION */}
                       <td className="py-3.5 px-3 text-right">
-                        <button
-                          onClick={() => removeItem(item.id)}
-                          disabled={isProcessing}
-                          className="w-7 h-7 rounded-lg hover:bg-rose-500/20 text-gray-500 hover:text-rose-400 transition flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed ml-auto"
-                          title="Remove from batch"
-                        >
-                          <i className="fa-solid fa-xmark text-xs"></i>
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          {item.status === 'Completed' && item.result && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  generateAnalysisPDF(item.result!, item.filename);
+                                } catch (pdfErr) {
+                                  console.error('Batch PDF generation error:', pdfErr);
+                                  alert('Unable to generate the PDF report. Please try again.');
+                                }
+                              }}
+                              className="w-7 h-7 rounded-lg hover:bg-[#00d4ff]/20 text-[#00d4ff] hover:text-white transition flex items-center justify-center cursor-pointer"
+                              title="Download PDF Report"
+                              aria-label="Download PDF Report"
+                            >
+                              <i className="fa-solid fa-file-pdf text-xs"></i>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            disabled={isProcessing}
+                            className="w-7 h-7 rounded-lg hover:bg-rose-500/20 text-gray-500 hover:text-rose-400 transition flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Remove from batch"
+                            aria-label="Remove from batch"
+                          >
+                            <i className="fa-solid fa-xmark text-xs"></i>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

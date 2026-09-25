@@ -1,304 +1,112 @@
-# 🚀 Quick Start Guide - Authentication System
+# 🚀 Quick Start Guide - Authentication & MFA System
 
-## Welcome to VoxForensics with Authentication!
+## Welcome to VoxForensics Authentication!
 
-Your VoxForensics app now has a complete user authentication system with login, registration, 2FA, referral program, and separate dashboards for admins and users.
+VoxForensics features a secure user management and authentication system powered by **Firebase Authentication**, **Cloud Firestore**, and **Email OTP Multi-Factor Authentication (MFA)**.
 
 ---
 
 ## ⚡ Quick Start (3 Steps)
 
-### Step 1: Open the App
-- You'll see the **Login Screen**
+### Step 1: Open the Application
+Navigate to `http://localhost:3000`. If you are not signed in, the **VoxForensics Authentication Portal** will display.
 
-### Step 2: Login or Register
+### Step 2: Sign In or Register
 
-**Option A: Use Demo Account (Fastest)**
-```
-Admin Account:
-Email: admin@voxforensics.com
+#### Option A: Use a Demo Account (Fastest for Testing)
+Pre-configured Firebase Authentication accounts are ready for testing:
+
+```text
+👑 Administrator Account:
+Email:    admin@voxforensics.com
 Password: admin123
+Access:   Full Admin Dashboard, user management, secure deletion
 
-User Account:
-Email: user@example.com
+👤 Standard User Account:
+Email:    user@example.com
 Password: user123
+Access:   Audio scanning, Batch Processing, Scan History, User Dashboard
 ```
 
-**Option B: Create New Account**
-1. Click "Register"
-2. Fill in: Name, Email, Password
-3. Optional: Enter referral code
-4. Click "Register"
-5. Setup 2FA (optional)
+*Tip: Click the eye icon next to the password input to toggle password visibility.*
 
-### Step 3: Start Using the App!
-- You'll see the main VoxForensics interface
-- Your user info appears at the top
-- Click "👤 Dashboard" to view your dashboard
-- Click "🚪 Logout" to sign out
+#### Option B: Register a New Account
+1. Click **"Register"** on the authentication card.
+2. Enter your Name, Email, and Password (minimum 6 characters).
+3. *(Optional)* Enter a referral code (e.g., `VF-USER001` or `VF-ADMIN01`).
+4. Click **"Create Account"**.
+5. Check your email for the verification link.
+6. Choose whether to enable **Email OTP Two-Factor Authentication (MFA)**.
 
----
-
-## 🎯 What You Can Do
-
-### As a Regular User:
-1. **Use VoxForensics** - Analyze audio for deepfakes
-2. **View Dashboard** - See your stats and scan history
-3. **Share Referral Code** - Invite friends and earn rewards
-4. **Manage Security** - Enable/disable 2FA
-
-### As an Admin:
-1. **All User Features** - Everything regular users can do
-2. **Admin Dashboard** - Manage all users
-3. **System Analytics** - View platform statistics
-4. **User Management** - Promote, demote, or delete users
-5. **System Settings** - Configure platform settings
+### Step 3: Accept Legal Consent & Start Scanning
+1. On first login, review the **Voice Data Usage Agreement & Privacy Consent**.
+2. Check the confirmation box and click **"I Agree"**.
+3. You now have access to the main VoxForensics application.
+4. Click **"👤 Dashboard"** in the top navigation bar to open your dashboard.
+5. Click **"🚪 Logout"** anytime to securely end your session.
 
 ---
 
-## 📱 Dashboard Access
+## 🔐 Two-Factor Authentication (Email OTP MFA)
 
-### User Dashboard
-- Click "👤 Dashboard" button in the top bar
-- See your profile, stats, and scan history
-- Access your referral code
-- View security settings
-
-### Admin Dashboard
-- Login with admin account
-- Click "👤 Dashboard" button
-- Access admin-only features:
-  - User management
-  - System analytics
-  - Platform settings
+### How Email OTP Works
+VoxForensics utilizes an application-level Email OTP MFA system:
+1. **Login**: Enter your email and password.
+2. **Detection**: The system detects that `twoFactorEnabled === true` on your account.
+3. **OTP Generation**: A secure, 6-digit cryptographic one-time passcode is generated and delivered to your email.
+4. **Verification Screen**: The application presents the OTP verification input.
+5. **Session Limits**:
+   - The code is valid for **10 minutes**.
+   - A **60-second cooldown** applies before requesting a resend.
+   - You have up to **5 attempts** before the session expires.
+6. **Enter Code**: Enter the 6-digit code and click **"Verify OTP"** to enter the app.
 
 ---
 
-## 🔐 Two-Factor Authentication (2FA)
+## 📱 Dashboards Access & Features
 
-### Setting Up 2FA:
-1. During registration, you'll be prompted
-2. Save the secret key in your authenticator app:
-   - Google Authenticator
-   - Authy
-   - Microsoft Authenticator
-3. Enter the 6-digit code to verify
-4. 2FA is now enabled!
+### 👤 User Dashboard (Standard Users)
+- **Profile Info**: Name, email, member since date, and role badge.
+- **Scan Analytics**: Total audio scans performed, deepfake/synthetic voices detected.
+- **Referral Program**: Your unique referral code (e.g. `VF-A1B2C3`), one-click copy button, and list of referred accounts.
+- **Security Status**: Email OTP MFA status indicator.
+- **Recent Scans**: Overview of recent audio scans with confidence scores.
 
-### Logging In with 2FA:
-1. Enter email and password
-2. Open your authenticator app
-3. Enter the current 6-digit code
-4. Click "Login"
+### 👑 Admin Dashboard (Administrators)
+- **System Overview**: Total users registered, administrator count, and MFA adoption metrics.
+- **User Management**:
+  - View all registered accounts from Firestore.
+  - **Promote / Demote**: Toggle administrative privileges for users.
+  - **Secure Deletion**: Delete user accounts safely via the `deleteUserAccount` Cloud Function.
+- **Security Safeguards**:
+  - Self-deletion is prevented.
+  - The primary administrator (`admin@voxforensics.com`) cannot be deleted or demoted.
 
 ---
 
 ## 🎁 Referral Program
 
-### Get Your Referral Code:
-1. Go to User Dashboard
-2. Find "🎁 Referral Program" section
-3. Your code looks like: `VF-A1B2C3`
-4. Click "📋 Copy" to copy it
-
-### Share with Friends:
-1. Send your referral code to friends
-2. They enter it during registration
-3. You'll see them in your referrals list
-4. Track your referral success!
+1. Open your **User Dashboard**.
+2. Locate your unique referral code (e.g., `VF-USER001`).
+3. Click **"Copy"** to copy the code to your clipboard.
+4. When a new user registers using your code, their profile is permanently linked (`referredBy`), and your referral count updates in real time.
 
 ---
 
-## 👥 Demo Accounts Explained
+## 🐛 Troubleshooting
 
-### Admin Account
-**Purpose:** Test admin features
-- **Email:** `admin@voxforensics.com`
-- **Password:** `admin123`
-- **Access:** Admin Dashboard
-- **Can:** Manage users, view analytics, system settings
+### "Invalid email or password"
+- Verify that credentials are typed correctly. Use the eye icon to verify typed passwords.
+- Ensure the account has been registered in Firebase Authentication.
 
-### User Account
-**Purpose:** Test user features
-- **Email:** `user@example.com`
-- **Password:** `user123`
-- **Access:** User Dashboard
-- **Can:** View stats, referral program, scan history
+### "Please verify your email before logging in"
+- Firebase Authentication requires email verification for new accounts.
+- Check your email inbox (including spam/junk folder) for the verification link from Firebase, click the link, and retry login.
 
----
+### "OTP code expired or invalid"
+- Email OTP codes expire after 10 minutes.
+- If expired or typed incorrectly more than 5 times, click **"Resend Code"** (available after the 60-second cooldown).
 
-## 🎨 What's New in the UI
-
-### Login Screen
-- Clean, modern design
-- Email/password fields
-- 2FA code input
-- Register/Login toggle
-- Demo account info
-
-### User Info Bar (Top of Main App)
-- Your avatar (first letter of name)
-- Name and email
-- Role badge (Admin/User)
-- Dashboard button
-- Logout button
-
-### Dashboards
-- Glassmorphic design
-- Responsive layout
-- Real-time statistics
-- Interactive elements
-
----
-
-## 🔒 Security Tips
-
-### For Users:
-1. ✅ Use a strong password (6+ characters)
-2. ✅ Enable 2FA for extra security
-3. ✅ Keep your referral code private
-4. ✅ Logout on shared computers
-5. ✅ Regularly check your scan history
-
-### For Admins:
-1. ✅ Monitor user activity
-2. ✅ Review new registrations
-3. ✅ Manage user roles carefully
-4. ✅ Keep system settings secure
-5. ✅ Regular data backups
-
----
-
-## 🐛 Common Issues & Solutions
-
-### "Can't login"
-- ✅ Check email and password
-- ✅ Verify 2FA code if enabled
-- ✅ Try demo accounts first
-
-### "Dashboard not loading"
-- ✅ Make sure you're logged in
-- ✅ Check your user role
-- ✅ Clear browser cache
-
-### "Lost my password"
-- ⚠️ Currently no password reset (client-side only)
-- ✅ Delete user data and re-register
-- ✅ Use demo accounts for testing
-
-### "2FA not working"
-- ✅ Check authenticator app time sync
-- ✅ Re-setup 2FA if needed
-- ✅ Try logging in without 2FA first
-
----
-
-## 📊 Understanding Your Dashboard
-
-### User Dashboard Stats:
-- **Total Scans:** How many audio files you've analyzed
-- **Deepfakes Detected:** Number of AI-generated audios found
-- **Referrals:** How many users you've invited
-
-### Admin Dashboard Stats:
-- **Total Users:** All registered users
-- **Admin Users:** Users with admin privileges
-- **Regular Users:** Standard users
-- **2FA Enabled:** Users with two-factor auth
-
----
-
-## 🎓 Best Practices
-
-### For Regular Users:
-1. Enable 2FA for security
-2. Share your referral code
-3. Regularly review scan history
-4. Keep your profile updated
-5. Logout when done
-
-### For Admins:
-1. Monitor user growth
-2. Review new registrations
-3. Manage user roles appropriately
-4. Check system analytics regularly
-5. Maintain system security
-
----
-
-## 🚀 Next Steps
-
-1. **Try the Demo Accounts**
-   - Login as admin and user
-   - Explore both dashboards
-   - See the difference in access
-
-2. **Create Your Account**
-   - Register with your email
-   - Setup 2FA
-   - Get your referral code
-
-3. **Start Using VoxForensics**
-   - Analyze audio files
-   - View results in dashboard
-   - Share with friends
-
-4. **Explore Features**
-   - User dashboard stats
-   - Referral program
-   - Admin management (if admin)
-
----
-
-## 💡 Pro Tips
-
-### For Better Security:
-- Always enable 2FA
-- Use unique passwords
-- Logout on shared devices
-- Monitor your scan history
-
-### For Referral Success:
-- Share your code on social media
-- Explain benefits to friends
-- Track your referrals in dashboard
-- Help friends get started
-
-### For Admins:
-- Regularly review user list
-- Monitor 2FA adoption
-- Check analytics for insights
-- Keep system updated
-
----
-
-## 📞 Need Help?
-
-### Quick Fixes:
-1. Clear browser cache
-2. Check localStorage
-3. Try demo accounts
-4. Re-register if needed
-
-### Documentation:
-- Read `AUTHENTICATION_SYSTEM.md` for detailed info
-- Check `README.md` for app features
-- Review `CONTRIBUTING.md` for development
-
----
-
-## 🎉 You're All Set!
-
-You now have:
-- ✅ Secure login system
-- ✅ Two-factor authentication
-- ✅ Referral program
-- ✅ Admin dashboard
-- ✅ User dashboard
-- ✅ Role-based access
-
-**Start exploring VoxForensics with full authentication!** 🚀
-
----
-
-**Happy analyzing! 🎙️🔍**
+### "Can't access Admin Dashboard"
+- Ensure you are logged in with an administrator account (`admin@voxforensics.com`).
+- Standard users only have access to the User Dashboard.
