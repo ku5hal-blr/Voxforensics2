@@ -210,7 +210,7 @@ export function AuthProvider({
   const [authLoading, setAuthLoading] =
     useState(true);
 
-  const mfaJustCompletedRef =
+  const otpVerifiedForCurrentLoginRef =
     useRef(false);
 
   /* ----------------------------------------------------------
@@ -330,7 +330,7 @@ export function AuthProvider({
             const profile =
               await loadUserProfile(
                 firebaseUser,
-                mfaJustCompletedRef.current
+                otpVerifiedForCurrentLoginRef.current
               );
 
             if (!profile) {
@@ -359,20 +359,28 @@ export function AuthProvider({
             }
 
             /*
-             * If 2FA was completed or profile already has twoFactorEnabled: true,
-             * restore the application dashboard session.
+             * Regular user MFA verification check:
+             * Do not use twoFactorEnabled === true as proof that the CURRENT login
+             * has completed MFA. It only means the account REQUIRES MFA.
              */
-            if (mfaJustCompletedRef.current || profile.twoFactorEnabled) {
-              setCurrentUser(profile);
+            if (profile.twoFactorEnabled) {
+              if (otpVerifiedForCurrentLoginRef.current) {
+                setCurrentUser(profile);
+                setAuthLoading(false);
+                return;
+              }
+
+              // 2FA required but not verified for current login attempt:
+              // Do not auto-log in to dashboard.
+              setCurrentUser(null);
               setAuthLoading(false);
               return;
             }
 
             /*
-             * User has not completed application 2FA:
-             * Do not auto-log in to dashboard.
+             * Regular user without 2FA enabled:
              */
-            setCurrentUser(null);
+            setCurrentUser(profile);
           } catch (error) {
             console.error(
               'Auth state error:',
@@ -399,7 +407,7 @@ export function AuthProvider({
   ): Promise<boolean> {
     try {
       if (mfaVerified) {
-        mfaJustCompletedRef.current =
+        otpVerifiedForCurrentLoginRef.current =
           true;
       }
 
@@ -444,13 +452,6 @@ export function AuthProvider({
         'VoxForensics login completed successfully.'
       );
 
-      if (mfaVerified) {
-        setTimeout(() => {
-          mfaJustCompletedRef.current =
-            false;
-        }, 1500);
-      }
-
       return true;
     } catch (error) {
       console.error(
@@ -472,6 +473,9 @@ export function AuthProvider({
     email: string,
     password: string
   ): Promise<boolean> {
+    otpVerifiedForCurrentLoginRef.current =
+      false;
+
     try {
       const cred = await signInWithEmailAndPassword(
         auth,
@@ -591,7 +595,7 @@ export function AuthProvider({
    * ---------------------------------------------------------- */
 
   function logout() {
-    mfaJustCompletedRef.current =
+    otpVerifiedForCurrentLoginRef.current =
       false;
 
     signOut(auth).catch((error) => {
@@ -698,6 +702,9 @@ export default function AuthSystem() {
   const [password, setPassword] =
     useState('');
 
+  const [showPassword, setShowPassword] =
+    useState(false);
+
   const [name, setName] =
     useState('');
 
@@ -778,6 +785,7 @@ export default function AuthSystem() {
     setStep('credentials');
     setEmail('');
     setPassword('');
+    setShowPassword(false);
 
     try {
       await signOut(auth);
@@ -904,23 +912,33 @@ export default function AuthSystem() {
           return;
         }
 
-        // Step C: Regular verified user -> Send application-level Email OTP
-        updatePendingFirebaseUser(refreshedUser);
-        const targetEmail = refreshedUser.email || email;
-        const otpRes = await sendEmailOtp(refreshedUser.uid, targetEmail);
+        // Step C: Regular user profile check for twoFactorEnabled
+        const isTwoFactorEnabled = Boolean(userData?.twoFactorEnabled);
 
-        if (!otpRes.success) {
-          setError(
-            otpRes.error ||
-            "We couldn't send the verification code. Please try again."
-          );
+        if (isTwoFactorEnabled) {
+          // Regular user requiring MFA -> generate & send OTP, pause at 'email-otp'
+          updatePendingFirebaseUser(refreshedUser);
+          const targetEmail = refreshedUser.email || email;
+          const otpRes = await sendEmailOtp(refreshedUser.uid, targetEmail);
+
+          if (!otpRes.success) {
+            setError(
+              otpRes.error ||
+              "We couldn't send the verification code. Please try again."
+            );
+            return;
+          }
+
+          setResendCooldown(otpRes.cooldownSeconds || 30);
+          setStep('email-otp');
+          setOtp('');
+          setMessage(`A 6-digit verification code has been sent to ${targetEmail}.`);
           return;
         }
 
-        setResendCooldown(otpRes.cooldownSeconds || 30);
-        setStep('email-otp');
-        setOtp('');
-        setMessage(`A 6-digit verification code has been sent to ${targetEmail}.`);
+        // Regular user without MFA enabled
+        await completeLogin(refreshedUser, false);
+        return;
       } catch (authError: any) {
         console.error(
           'Authentication error:',
@@ -997,6 +1015,7 @@ export default function AuthSystem() {
         setMessage(
           `Email verified! A 6-digit verification code has been sent to ${targetEmail} to complete Two-Factor Authentication.`
         );
+        return;
       } catch (error: any) {
         setError(
           getFirebaseErrorMessage(
@@ -1193,6 +1212,7 @@ export default function AuthSystem() {
     setMessage('');
     setOtp('');
     updatePendingFirebaseUser(null);
+    setShowPassword(false);
   };
 
   /* ==========================================================
@@ -1442,28 +1462,76 @@ export default function AuthSystem() {
               Password
             </label>
 
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              autoComplete={
-                mode === 'login'
-                  ? 'current-password'
-                  : 'new-password'
-              }
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                padding: '13px 14px',
-                borderRadius: '10px',
-                border: '1px solid rgba(0, 212, 255, 0.18)',
-                background: 'rgba(13, 24, 48, 0.85)',
-                color: '#ffffff',
-                outline: 'none',
-                fontSize: '14px',
-              }}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                autoComplete={
+                  mode === 'login'
+                    ? 'current-password'
+                    : 'new-password'
+                }
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '13px 44px 13px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(0, 212, 255, 0.18)',
+                  background: 'rgba(13, 24, 48, 0.85)',
+                  color: '#ffffff',
+                  outline: 'none',
+                  fontSize: '14px',
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword((previous) => !previous)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: showPassword ? '#00d4ff' : '#8c9bb1',
+                  transition: 'color 0.15s ease',
+                }}
+              >
+                <i
+                  className={
+                    showPassword
+                      ? 'fa-solid fa-eye-slash'
+                      : 'fa-solid fa-eye'
+                  }
+                  style={{ fontSize: '15px' }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    width: '1px',
+                    height: '1px',
+                    padding: 0,
+                    margin: '-1px',
+                    overflow: 'hidden',
+                    clip: 'rect(0, 0, 0, 0)',
+                    whiteSpace: 'nowrap',
+                    border: 0,
+                  }}
+                >
+                  {showPassword ? 'Hide password' : 'Show password'}
+                </span>
+              </button>
+            </div>
           </div>
 
           {mode === 'register' && (

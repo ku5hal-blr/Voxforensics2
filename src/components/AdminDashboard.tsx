@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   collection,
   doc,
-  deleteDoc,
   setDoc,
   onSnapshot,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase';
 import { User } from './AuthSystem';
 
 export default function AdminDashboard({
@@ -24,6 +24,7 @@ export default function AdminDashboard({
   const [activeTab, setActiveTab] = useState<
     'overview' | 'users' | 'analytics' | 'settings'
   >('overview');
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -95,13 +96,51 @@ export default function AdminDashboard({
       return;
     }
 
-    if (confirm('Are you sure you want to delete this user?')) {
-      try {
-        await deleteDoc(doc(db, 'users', userId));
-      } catch (err: any) {
-        console.error('Failed to delete user:', err);
-        alert(`Failed to delete user: ${err?.message || 'Permission denied'}`);
+    if (!confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    setDeletingUserId(userId);
+
+    try {
+      const deleteUserAccountFn = httpsCallable<
+        { uid: string },
+        { success: boolean; message?: string }
+      >(functions, 'deleteUserAccount');
+
+      const result = await deleteUserAccountFn({ uid: userId });
+
+      if (result.data?.success) {
+        alert('User account deleted successfully.');
+      } else {
+        alert(result.data?.message || 'User account deleted successfully.');
       }
+    } catch (err: any) {
+      console.error('Failed to delete user account via backend function:', err);
+
+      const code = err?.code || '';
+      const rawMessage = (err?.message || '').toLowerCase();
+
+      if (
+        code.includes('permission-denied') ||
+        rawMessage.includes('permission')
+      ) {
+        alert('You do not have permission to delete this user.');
+      } else if (
+        code.includes('failed-precondition') &&
+        (rawMessage.includes('own account') || rawMessage.includes('cannot delete'))
+      ) {
+        alert('Administrators cannot delete their own account.');
+      } else if (
+        code.includes('not-found') ||
+        rawMessage.includes('not found')
+      ) {
+        alert('User account was not found.');
+      } else {
+        alert('Unable to delete the user. Please try again.');
+      }
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -397,9 +436,10 @@ export default function AdminDashboard({
 
                     <button
                       onClick={() => deleteUser(user.id)}
-                      className="neon-btn neon-btn-danger text-xs py-1 px-3"
+                      disabled={deletingUserId === user.id}
+                      className="neon-btn neon-btn-danger text-xs py-1 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      🗑️ Delete
+                      {deletingUserId === user.id ? 'Deleting...' : '🗑️ Delete'}
                     </button>
                   </div>
                 </div>

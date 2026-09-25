@@ -34,6 +34,7 @@ import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import E2ETestPanel from './components/E2ETestPanel';
 import LiveBackground from './components/LiveBackground';
+import BatchProcessing from './components/BatchProcessing';
 
 /*
  * ============================================================
@@ -88,7 +89,7 @@ const predictWithML = async (file: File) => {
 type TabType =
   | 'home'
   | 'scanner'
-  | 'refer'
+  | 'batch'
   | 'history'
   | 'about';
 
@@ -176,7 +177,7 @@ function AppContent() {
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem('vox_active_tab') as TabType;
-    return ['home', 'scanner', 'refer', 'history', 'about'].includes(saved)
+    return ['home', 'scanner', 'batch', 'history', 'about'].includes(saved)
       ? saved
       : 'home';
   });
@@ -500,7 +501,7 @@ function AppContent() {
 
     if (
       !previousUserRef.current &&
-      user?.role === 'admin'
+      user
     ) {
       setShowDashboard(true);
     }
@@ -572,18 +573,7 @@ function AppContent() {
     user,
   ]);
 
-  /*
-   * ------------------------------------------------------------
-   * RESTORE REFERRAL DASHBOARD ON MOUNT / REFRESH
-   * ------------------------------------------------------------
-   */
 
-  useEffect(() => {
-    if (activeTab === 'refer' && user) {
-      setShowDashboard(true);
-      setOpenReferralCard(true);
-    }
-  }, [activeTab, user]);
 
   /*
    * ------------------------------------------------------------
@@ -2966,10 +2956,6 @@ function AppContent() {
           setShowDashboard(
             false
           );
-
-          if (activeTab === 'refer') {
-            setActiveTab('home');
-          }
         }}
       />
     );
@@ -3016,13 +3002,13 @@ function AppContent() {
 
           </div>
 
-          <div className="hidden md:flex items-center gap-1">
+          <div className="flex items-center gap-1 overflow-x-auto py-1">
 
             {(
               [
                 'home',
                 'scanner',
-                'refer',
+                'batch',
                 'history',
                 'about',
               ] as TabType[]
@@ -3033,40 +3019,9 @@ function AppContent() {
                 <button
                   key={tab}
                   onClick={() => {
-
-                    /*
-                     * REFER
-                     */
-
-                    if (
-                      tab ===
-                      'refer'
-                    ) {
-                      if (
-                        !requireAuthentication()
-                      ) {
-                        return;
-                      }
-
-                      setActiveTab(
-                        'refer'
-                      );
-
-                      setOpenReferralCard(
-                        true
-                      );
-
-                      setShowDashboard(
-                        true
-                      );
-
-                      return;
-                    }
-
                     /*
                      * HISTORY
                      */
-
                     if (
                       tab ===
                       'history'
@@ -3088,7 +3043,7 @@ function AppContent() {
                       tab
                     );
                   }}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 border ${activeTab ===
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 border whitespace-nowrap ${activeTab ===
                     tab
                     ? 'text-white bg-[#0d1830]/90 border-[#23406e] shadow-[0_0_12px_rgba(0,212,255,0.12)]'
                     : 'text-gray-400 hover:text-white border-transparent'
@@ -3103,8 +3058,8 @@ function AppContent() {
                         'scanner'
                         ? 'fa-solid fa-expand'
                         : tab ===
-                          'refer'
-                          ? 'fa-solid fa-gift'
+                          'batch'
+                          ? 'fa-solid fa-layer-group'
                           : tab ===
                             'history'
                             ? 'fa-solid fa-clock-rotate-left'
@@ -4523,6 +4478,28 @@ function AppContent() {
             </div>
 
           )}
+
+        {/* ================================================== */}
+        {/* BATCH PROCESSING */}
+        {/* ================================================== */}
+
+        {activeTab === 'batch' && (
+          <BatchProcessing
+            user={user}
+            requireAuthentication={requireAuthentication}
+            predictWithML={predictWithML}
+            onHistoryRefresh={async () => {
+              if (user?.id) {
+                try {
+                  const updated = await getUserScanHistory(user.id);
+                  setHistory(updated);
+                } catch (err) {
+                  console.warn('Failed to refresh history:', err);
+                }
+              }
+            }}
+          />
+        )}
 
         {/* ================================================== */}
         {/* HISTORY */}
