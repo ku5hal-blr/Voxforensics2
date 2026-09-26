@@ -69,3 +69,20 @@ Built with **Three.js** and **React Three Fiber**:
 - Compact progress bar with gradient fill.
 - Results table with color-coded status badges (`Pending`, `Processing`, `Completed`, `Error`).
 - Per-row action buttons for downloading individual PDF reports.
+
+---
+
+## 4. Mobile Responsive Design System (`src/index.css`, `src/App.tsx`)
+
+### Breakpoint Strategy
+- **Mobile First (320px–430px)**: Compact padding (`p-4`), stacked vertical layouts (`flex-col`), full-width touch targets.
+- **Tablet & Desktop (640px / 768px / 1024px+)**: Expanded multi-column grids, horizontal navigation bars, side-by-side metric tiles.
+
+### Mobile Navigation Drawer
+- **Trigger**: Animated hamburger menu button visible only below the 768px breakpoint (`md:hidden`).
+- **Drawer Panel**: Slide-down glassmorphic container with backdrop blur, presenting all navigation links (`Home`, `Scanner`, `Batch`, `History`, `About`), user profile metadata, Dashboard link, and Logout button.
+- **Auto-Close**: Navigation interactions automatically dismiss the drawer.
+
+### Defensive Mobile Styling
+- **Action Buttons**: Applied `whitespace-nowrap flex-shrink-0` to header CTA buttons (e.g., `Login / Sign Up`, `Logout`) to prevent broken multiline wrapping.
+- **Horizontal Overflow Isolation**: Data-dense forensic tables in Admin Dashboard and Batch Processing are wrapped in `overflow-x-auto` with styled scrollbars, keeping the parent glassmorphic containers intact.

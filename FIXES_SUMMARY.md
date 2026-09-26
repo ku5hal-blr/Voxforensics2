@@ -8,7 +8,7 @@ This document summarizes the major fixes, system restorations, and feature addit
 
 ### 1. Random Forest Machine Learning Backend Integration
 - **Implementation**: Connected the React frontend to a dedicated Python FastAPI backend (`ml/api.py`) exposing `POST /predict`.
-- **Inference Engine**: Replaced early client-side heuristic approximations with a trained Random Forest model (`models/random_forest_model.pkl`) evaluating 48 acoustic parameters.
+- **Inference Engine**: Replaced early client-side heuristic approximations with a trained Random Forest model (`ml/models/deepfake_detector.joblib`) evaluating 45 acoustic parameters.
 - **Result Metrics**: Provides real vs. fake classification verdicts, confidence percentages (0–100%), and granular probability distributions.
 
 ---
@@ -88,19 +88,42 @@ This document summarizes the major fixes, system restorations, and feature addit
 - **Features**:
   - Two prominent action buttons: **"I Agree"** and **"I Don't Agree"**.
   - Expandable legal sections for Voice Data Usage, Privacy Policy, Terms of Service, and Data Storage.
-  - Persisted in `localStorage` under `voxforensics_consent`.
+  - Persisted in `sessionStorage` under `voxforensics_consent_${userId}` (value `'true'`).
+  - Automatic modal bypass for administrators (`role === 'admin'`).
+  - User session cleanup on logout and client-side revocation support.
+
+---
+
+### 9. Mobile Responsiveness & Hamburger Drawer Navigation
+- **Issue**: Desktop navigation and complex data tables suffered clipping and horizontal overflow on small mobile viewports (320px–430px).
+- **Solution**:
+  - Implemented an animated mobile hamburger navigation toggle (`md:hidden`) with full slide-down drawer in `src/App.tsx`.
+  - Wrapped data-dense tables in `overflow-x-auto` across `AdminDashboard.tsx` and `BatchProcessing.tsx`.
+  - Added `whitespace-nowrap flex-shrink-0` to authentication and action buttons to eliminate unintended multiline breaks.
+  - Adapted hero titles, sample trigger buttons, and cards from `flex-col` on mobile to `flex-row` on larger screens.
+
+---
+
+### 10. Production Cloud Deployment & Containerization
+- **Implementation**:
+  - Containerized Python ML backend using `ml/Dockerfile` (`python:3.10-slim` with `ffmpeg`) and deployed on **Google Cloud Run** at `https://voxforensics-ml-220640941248.us-central1.run.app`.
+  - Dynamic API endpoint binding in `src/App.tsx` via `import.meta.env.VITE_ML_API_URL` with `.env.example` and `.env.production` templates.
+  - Configured Firebase Hosting in `firebase.json` with SPA routing (`dist` directory, `** -> /index.html`).
 
 ---
 
 ## 📁 Key Files Touched During These Enhancements
 
-- `src/App.tsx`: Navigation, tab routing, 50 MB file limits, PDF download triggers.
+- `src/App.tsx`: Navigation, mobile hamburger drawer, responsive layouts, 50 MB file limits, dynamic ML API URL.
+- `src/index.css`: Glassmorphic styling tokens, responsive button adjustments, mobile viewport media queries.
 - `src/components/AuthSystem.tsx`: Password show/hide toggle, Email OTP MFA state machine, email verification.
 - `src/services/emailOtp.ts`: Cryptographic random OTP generation, SHA-256 salted hashing, session lifecycle.
-- `src/components/BatchProcessing.tsx`: Restored multi-file batch processing queue and PDF generation.
+- `src/components/BatchProcessing.tsx`: Restored multi-file batch processing queue, PDF generation, responsive tables.
+- `src/components/AdminDashboard.tsx`: Cloud Function user deletion integration, role toggles, horizontal table scroll.
+- `src/components/UserDashboard.tsx`: User profile statistics, responsive cards, referral code copy.
 - `src/utils/generateAnalysisPDF.ts`: Client-side jsPDF report builder with embedded waveform canvas.
-- `functions/src/index.ts`: Callable Cloud Function `deleteUserAccount` with Admin SDK validation.
-- `functions/package.json`: Node 20 runtime engine configuration.
-- `src/components/AdminDashboard.tsx`: Cloud Function user deletion integration and role toggles.
+- `functions/src/index.ts`: Callable Cloud Function `deleteUserAccount` with Admin SDK validation (Node 20).
 - `ml/api.py`: FastAPI server and `/predict` endpoint.
-- `ml/predict.py`: 48-feature acoustic extraction pipeline.
+- `ml/predict.py`: 45-feature acoustic extraction pipeline.
+- `ml/Dockerfile`: Docker container specification for Cloud Run deployment.
+- `firebase.json`: Firebase Hosting, Functions, and Firestore configuration.

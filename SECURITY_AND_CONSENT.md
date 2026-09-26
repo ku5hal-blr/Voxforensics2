@@ -93,8 +93,8 @@ VoxForensics complies with international biometric and consumer privacy standard
   - **Privacy Policy**: Explains data governance, lack of third-party sharing, and user deletion rights.
   - **Terms of Service**: Disclaims that the software provides forensic estimates, not definitive legal evidence.
   - **Data Storage Information**: Clarifies that voice recordings are ephemeral and deleted after processing.
-- **Storage**: User consent confirmation is persisted in browser `localStorage` under `voxforensics_consent`.
-- **Revocation**: Users can revoke consent via the User Dashboard, which clears consent records and stored scan metadata.
+- **Storage**: User consent confirmation is persisted in browser `sessionStorage` under `voxforensics_consent_${user.id}`. Admin accounts (`role === 'admin'`) automatically bypass the modal.
+- **Revocation**: Users can revoke consent via the User Dashboard, which clears their session consent record (`sessionStorage.removeItem`) and resets application consent status.
 
 ---
 
@@ -106,7 +106,7 @@ VoxForensics complies with international biometric and consumer privacy standard
 | **Scan Metadata** | Firestore `/scans` | Maintained until deleted by user | Queryable by authenticated users |
 | **Audio Files** | Ephemeral RAM / Temp files | Seconds (duration of ML extraction only) | Automatically unlinked / deleted |
 | **OTP Sessions** | `/email_otp_sessions` & Memory | 10 minutes (expires automatically) | Salted SHA-256 hash |
-| **Consent State** | Browser `localStorage` | Persisted until revoked by user | Client device storage |
+| **Consent State** | Browser `sessionStorage` (`voxforensics_consent_${userId}`) | Active session (cleared on logout or revocation; bypassed by admins) | Client-side memory session storage |
 
 ---
 

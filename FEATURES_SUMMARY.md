@@ -8,12 +8,13 @@ This document outlines the complete set of features currently active in the VoxF
 
 | Feature | Subsystem | Description | Location / File |
 | :--- | :--- | :--- | :--- |
-| **Random Forest ML Audio Detection** | ML Backend | Predicts Authentic (`REAL`) vs Deepfake (`FAKE`) using a trained model with 48 acoustic features | `ml/api.py`, `models/random_forest_model.pkl` |
-| **FastAPI REST API** | ML Backend | High-performance Python backend serving inference at `/predict` | `ml/api.py` |
+| **Random Forest ML Audio Detection** | ML Backend | Predicts Authentic (`REAL`) vs Deepfake (`FAKE`) using a trained model with 45 acoustic features | `ml/api.py`, `ml/models/deepfake_detector.joblib` |
+| **FastAPI REST API** | ML Backend | High-performance Python backend serving inference at `/predict` (local & Google Cloud Run) | `ml/api.py` |
 | **Audio File Upload** | Frontend | Drag & drop or file selector supporting WAV, MP3, OGG, FLAC, M4A up to 50 MB | `src/App.tsx` |
 | **Microphone Voice Recording** | Frontend | Live browser audio capture with real-time waveform visualization bars | `src/App.tsx` |
 | **Batch Processing** | Frontend / ML | Dedicated tab for queuing multiple audio files, sequential analysis, and per-file PDF generation | `src/components/BatchProcessing.tsx` |
 | **Forensic PDF Reports with Waveform** | Forensic Reporting | Client-side jsPDF report generator embedding audio waveform graphics, acoustic metrics, and legal disclaimers | `src/utils/generateAnalysisPDF.ts` |
+| **Mobile-Responsive UI & Navigation** | Frontend / UX | Adaptive layout (320px–430px) with slide-down hamburger drawer, non-wrapping controls, and scrollable tables | `src/App.tsx`, `src/index.css` |
 | **Firebase Authentication** | Auth & Identity | Secure user registration, email/password login, and session persistence | `src/components/AuthSystem.tsx`, `src/firebase.ts` |
 | **Email Verification** | Auth & Identity | Mandatory verification link for new user registrations via Firebase Auth | `src/components/AuthSystem.tsx` |
 | **Email OTP Multi-Factor Authentication** | Auth & Security | Cryptographically secure 6-digit OTP MFA with salted SHA-256 hashing, 10m expiry, and 60s cooldown | `src/services/emailOtp.ts` |
@@ -21,7 +22,7 @@ This document outlines the complete set of features currently active in the VoxF
 | **Admin Dashboard** | Administration | View registered users, manage user roles (promote/demote), view system stats | `src/components/AdminDashboard.tsx` |
 | **Secure Admin User Deletion** | Cloud Functions | Callable Cloud Function `deleteUserAccount` using Firebase Admin SDK with primary admin protection | `functions/src/index.ts` |
 | **User Dashboard** | User Profile | View personal scan metrics, recent scan history, and security settings | `src/components/UserDashboard.tsx` |
-| **Referral System** | Growth & Tracking | Unique user referral codes (`VF-XXXXXX`) tracked during registration | `src/components/UserDashboard.tsx` |
+| **Referral System** | Growth & Tracking | Unique user referral codes (`VOX-XXXXXX`) tracked during registration | `src/components/UserDashboard.tsx` |
 | **Scan History** | Data Persistence | Persistent record of audio scans stored in Firestore `/scans` with local caching and deletion | `src/services/history.ts` |
 | **Legal Consent System** | Compliance | Single-confirmation checkbox with expandable policies compliant with GDPR and BIPA | `src/components/ConsentModal.tsx` |
 | **3D Cyberpunk Background** | Visuals / UI | Interactive Three.js particle face silhouette with animated glowing wave visualizers | `src/components/LiveBackground.tsx` |
@@ -33,8 +34,8 @@ This document outlines the complete set of features currently active in the VoxF
 ### 1. Audio Deepfake Detection Pipeline
 - **Input Formats**: Accepts `.wav`, `.mp3`, `.ogg`, `.flac`, and `.m4a` files up to **50 MB**.
 - **Preprocessing**: Normalizes audio sampling to 16 kHz mono.
-- **Feature Extraction**: Extracts 48 acoustic parameters (MFCCs, spectral centroid, spectral rolloff, spectral flux, zero-crossing rate, pitch variability, and harmonicity).
-- **Classification**: Evaluated by `models/random_forest_model.pkl` to compute class probabilities.
+- **Feature Extraction**: Extracts 45 acoustic parameters (MFCCs 1-13 mean & std, spectral centroid, rolloff, bandwidth, flatness means & stds, zero-crossing rate mean & std, RMS mean & std, chroma mean & std, tempo, and pitch statistics).
+- **Classification**: Evaluated by `ml/models/deepfake_detector.joblib` to compute class probabilities.
 - **Output**: Returns verdict (`REAL` or `FAKE`), confidence score (0–100%), and granular probability distributions.
 
 ### 2. Batch Audio Processing
@@ -67,7 +68,13 @@ This document outlines the complete set of features currently active in the VoxF
   - Self-deletion is prevented on the server side.
 
 ### 5. Legal & Biometric Consent System
-- Streamlined modal appearing on first use.
+- Streamlined modal appearing on first use for standard users (admin accounts automatically bypass).
 - Requires user to tick: *"I confirm that I have read and understood the above information"*.
 - Expandable legal policies covering Voice Data Usage, Privacy Policy, Terms of Service, and Data Storage.
-- Consent is recorded in `localStorage` under `voxforensics_consent`.
+- Consent is stored in `sessionStorage` under `voxforensics_consent_${userId}` (value `'true'`), cleared on user logout, and revocable via the User Dashboard.
+
+### 6. Mobile-Responsive Design & Hamburger Navigation
+- **Adaptive Breakpoints**: Tailwind CSS responsive design tailored for mobile viewports (320px–430px) through 1024px+ desktop monitors.
+- **Mobile Hamburger Drawer**: Collapsible slide-down navigation drawer (`md:hidden`) with full navigation tabs, active user profile pill, and one-tap logout.
+- **Table Horizontal Scrolling**: Wrap complex forensic data tables in `overflow-x-auto` to prevent viewport breakages.
+- **Non-Wrapping Actions**: Critical CTA and authentication buttons use `whitespace-nowrap flex-shrink-0` to prevent awkward multiline breaks.

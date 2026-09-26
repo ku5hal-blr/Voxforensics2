@@ -44,10 +44,12 @@ Ensure both services are running locally before starting your test session:
 ---
 
 ### 2. Legal Consent Modal
-- [ ] **Initial Presentation**: On first sign-in on a fresh browser profile, verify the **Voice Data Usage Agreement** modal appears.
-- [ ] **Expandable Sections**: Click on Privacy Policy, Terms of Service, and Data Storage information.
-- [ ] **Confirmation Requirement**: Verify the "I Agree" button remains disabled until the confirmation checkbox is ticked.
-- [ ] **Acceptance Persistence**: Verify consent status is saved to `localStorage` under `voxforensics_consent`.
+- [ ] **Initial Presentation**: On first sign-in as a standard user on a fresh browser session, verify the **Voice Data Usage Agreement** modal appears.
+- [ ] **Admin Bypass**: Sign in with an administrator account (`admin@voxforensics.com`) and verify that administrators automatically bypass the consent modal.
+- [ ] **Expandable Sections**: Click on Privacy Policy, Terms of Service, and Data Storage information to verify disclosures expand and collapse.
+- [ ] **Confirmation Requirement**: Verify the "I Agree" button remains disabled until the single confirmation checkbox is ticked.
+- [ ] **Acceptance Persistence**: Verify consent status is saved to `sessionStorage` under `voxforensics_consent_${userId}` (set to `'true'`). Verify consent survives page reloads within the session.
+- [ ] **Logout Teardown**: Log out and verify session consent is removed, requiring consent upon next login.
 
 ---
 
@@ -57,12 +59,12 @@ Ensure both services are running locally before starting your test session:
 1. Navigate to the **Home** or **Scanner** tab.
 2. Drag and drop or select an audio file (WAV, MP3, OGG, FLAC, M4A up to 50 MB).
 3. Verify the file size and audio player controls appear.
-4. Verify the frontend sends `POST /predict` to `http://127.0.0.1:8000/predict`.
+4. Verify the frontend sends `POST /predict` to the configured endpoint (`${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict`).
 5. **Expected Results**:
    - Classification verdict: **REAL** (green badge) or **FAKE / AI-GENERATED** (purple/red badge).
    - Confidence percentage (e.g. 92.4%).
    - Real vs. Fake probability distribution bars.
-   - Extracted acoustic metrics table (MFCCs, Spectral Centroid, Rolloff, Pitch Variability, Zero-Crossing Rate).
+   - Extracted 45 acoustic metrics table (MFCCs 1-13 mean & std, Spectral Centroid, Rolloff, Bandwidth, Flatness, RMS, ZCR, Chroma, Tempo, Pitch stats).
 
 #### B. Microphone Recording Test
 1. Click the **"Start Recording"** button.
@@ -118,12 +120,12 @@ Ensure both services are running locally before starting your test session:
 ---
 
 ### 7. User Dashboard
-1. Sign in as a standard user (`user@example.com`).
+1. Sign in as a standard user (`user@example.com` / `user123`).
 2. Click **"👤 Dashboard"** in the navigation header.
 3. Verify:
    - Profile avatar, name, email, and "User" role badge.
    - Total Scans and Deepfakes Detected counters.
-   - **Referral Program card**: Displays user's unique referral code (`VF-USER001`) with working "Copy" button.
+   - **Referral Program card**: Displays user's unique referral code (`VOX-XXXXXX`) with working "Copy" button.
    - Security Status card showing Email OTP MFA toggle.
    - Recent Scans list.
 
@@ -152,3 +154,18 @@ Ensure both services are running locally before starting your test session:
 2. Verify the 3D Three.js particle face silhouette is visible in the background.
 3. Observe smooth 60 FPS animation: particle breathing, gentle rotation, and glowing sine waves across the viewport base.
 4. Verify high-contrast text readability across glassmorphic cards.
+
+---
+
+### 10. Mobile Responsiveness & Viewport Testing
+1. Open Chrome DevTools device mode (or mobile device) and test on viewports from 320px–430px (e.g., iPhone SE, iPhone 12/14 Pro, Pixel 7).
+2. **Mobile Navigation Drawer**:
+   - Verify the hamburger menu button appears (`md:hidden`) and horizontal desktop navigation tabs are hidden.
+   - Tap the hamburger button: verify the mobile drawer expands with all navigation links (`Home`, `Scanner`, `Batch`, `History`, `About`), user profile display, Dashboard button, and Logout button.
+   - Tap any link: verify the application navigates to the selected view and the drawer closes automatically.
+3. **Unauthenticated Mobile Header**:
+   - Log out and verify the "Login / Sign Up" button displays with `whitespace-nowrap flex-shrink-0` without wrapping or overlapping the brand title.
+4. **Layout Adaptation**:
+   - Verify hero title and action buttons stack neatly (`flex-col sm:flex-row`).
+   - Verify audio player controls, visualizer, and action buttons fit inside the viewport without page overflow.
+   - In Admin Dashboard and Batch Processing, verify data tables can be scrolled horizontally within cards (`overflow-x-auto`) without breaking page width.

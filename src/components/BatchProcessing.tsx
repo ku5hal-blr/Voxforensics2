@@ -359,7 +359,7 @@ export default function BatchProcessing({
             <div className="w-10 h-10 rounded-xl bg-[#00d4ff]/10 border border-[#00d4ff]/30 flex items-center justify-center text-[#00d4ff]">
               <i className="fa-solid fa-layer-group text-lg"></i>
             </div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
               Batch Processing
             </h2>
           </div>
@@ -369,11 +369,11 @@ export default function BatchProcessing({
         </div>
 
         {queue.length > 0 && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isProcessing}
-              className="neon-btn neon-btn-outline text-xs py-2 px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="neon-btn neon-btn-outline text-xs py-2 px-3 sm:px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <i className="fa-solid fa-plus"></i>
               Add More
@@ -381,7 +381,7 @@ export default function BatchProcessing({
             <button
               onClick={clearBatch}
               disabled={isProcessing}
-              className="neon-btn neon-btn-danger text-xs py-2 px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="neon-btn neon-btn-danger text-xs py-2 px-3 sm:px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <i className="fa-solid fa-trash-can"></i>
               Clear Batch
@@ -514,10 +514,10 @@ export default function BatchProcessing({
 
       {/* QUEUE TABLE & CONTROLS */}
       {queue.length > 0 ? (
-        <div className="glass-panel p-6 space-y-4">
+        <div className="glass-panel p-4 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-bold text-white">Batch Queue</h3>
+              <h3 className="text-base sm:text-lg font-bold text-white">Batch Queue</h3>
               <span className="px-2.5 py-0.5 rounded-full bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-xs font-semibold text-[#00d4ff]">
                 {queue.length} {queue.length === 1 ? 'file' : 'files'}
               </span>
@@ -526,7 +526,7 @@ export default function BatchProcessing({
             <button
               onClick={processBatch}
               disabled={isProcessing || !hasWaitingItems}
-              className="neon-btn neon-btn-primary py-2.5 px-6 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,212,255,0.2)]"
+              className="neon-btn neon-btn-primary py-2.5 px-6 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,212,255,0.2)] w-full sm:w-auto"
             >
               {isProcessing ? (
                 <>
@@ -543,8 +543,8 @@ export default function BatchProcessing({
           </div>
 
           {/* TABLE CONTAINER */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
+          <div className="overflow-x-auto -mx-2 sm:mx-0">
+            <table className="w-full min-w-[620px] text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-white/10 text-xs text-gray-400 uppercase tracking-wider font-semibold">
                   <th className="py-3 px-3">#</th>

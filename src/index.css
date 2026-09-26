@@ -263,3 +263,22 @@ html, body, #root {
 .batch-item:hover {
   border-color: rgba(0, 212, 255, 0.3);
 }
+
+/* Responsive Utilities & Mobile Breakpoints */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (max-width: 480px) {
+  .neon-btn {
+    padding: 10px 16px;
+  }
+
+  .glass-panel {
+    border-radius: 12px;
+  }
+}

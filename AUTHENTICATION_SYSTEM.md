@@ -43,7 +43,7 @@ VoxForensics features a dedicated Email OTP service (`src/services/emailOtp.ts`)
 
 ### 5. User Dashboard & Referral Program
 - **Personal Statistics**: Total scans performed, synthetic voices detected, and referral counts.
-- **Unique Referral Code**: Automatically generated unique referral identifier (`VF-XXXXXX`) assigned to each account.
+- **Unique Referral Code**: Automatically generated unique referral identifier (`VOX-XXXXXX`) assigned to each account.
 - **Referral Relationship**: Stores `referredBy` metadata during registration when a referral code is supplied.
 - **Security Status**: Displays current 2FA status and security recommendations.
 
@@ -63,7 +63,7 @@ VoxForensics features a dedicated Email OTP service (`src/services/emailOtp.ts`)
 4. Verification email dispatched: sendEmailVerification()
    ↓
 5. Firestore profile created in /users/{userId}:
-   - name, email, role: 'user', referralCode, referredBy, twoFactorEnabled: false
+   - name, email, role: 'user', referralCode: generateReferralCode() ('VOX-XXXXXX'), referredBy, twoFactorEnabled: false
    ↓
 6. User prompted with 2FA setup option (enable Email OTP or skip)
    ↓
@@ -98,9 +98,11 @@ VoxForensics features a dedicated Email OTP service (`src/services/emailOtp.ts`)
         └─ Proceed to Consent Flow
    ↓
 6. Consent Flow:
-   - Check if consent accepted in localStorage
-   - If not accepted → Show ConsentModal
-   - If accepted → Load main application
+   - Check if consent accepted in sessionStorage (`voxforensics_consent_${userId}`)
+   - If user has role === 'admin' → Automatically bypass consent modal
+   - If not accepted → Show ConsentModal (single confirmation checkbox)
+   - If accepted → Save 'true' in sessionStorage and load main application
+   - On logout → Clear sessionStorage user consent so consent is requested next session
 ```
 
 ### C. Administrator Login Flow
@@ -112,7 +114,7 @@ VoxForensics features a dedicated Email OTP service (`src/services/emailOtp.ts`)
    ↓
 3. System loads profile and detects role === 'admin'
    ↓
-4. Admin session established
+4. Admin session established (automatically bypasses consent modal)
    ↓
 5. User Info Bar displays "Admin" badge and unlocks Admin Dashboard access
 ```
@@ -129,6 +131,12 @@ The project includes pre-configured Firebase Authentication accounts for demonst
 - **Role:** `admin`
 - **Privileges:** Admin Dashboard access, user analytics, Cloud Function user deletion.
 
+### 👤 Standard User Account
+- **Email:** `user@example.com`
+- **Password:** `user123`
+- **Role:** `user`
+- **Privileges:** Audio scanner, Batch Processing, Scan History, User Dashboard, referral sharing.
+
 ## 🗄️ Database Schema (Firestore)
 
 ### Collection: `/users/{userId}`
@@ -138,7 +146,7 @@ interface UserProfile {
   name: string;             // User display name
   email: string;            // User email address
   role: 'admin' | 'user';   // Role identifier
-  referralCode: string;     // Unique code (e.g. "VF-A1B2C3")
+  referralCode: string;     // Unique code (e.g. "VOX-A1B2C3")
   referredBy?: string;      // Referral code of inviter (optional)
   twoFactorEnabled: boolean;// MFA toggle
   createdAt: string;        // ISO timestamp

@@ -15,6 +15,7 @@ The consent system employs a streamlined, single-checkbox confirmation model wit
 
 ### 1. Presentation
 - On first login or new browser session, the **Voice Data Usage Agreement** modal appears automatically before access to forensic tools is granted.
+- **Admin Bypass**: Accounts with administrative privileges (`role === 'admin'`) automatically bypass the consent modal.
 
 ### 2. Policy Disclosures
 - **Voice Data Usage** (always visible): Explains that audio submitted via file upload or microphone capture is analyzed to extract acoustic parameters for deepfake classification. Clarifies that audio recordings are ephemeral and deleted after feature extraction.
@@ -23,29 +24,28 @@ The consent system employs a streamlined, single-checkbox confirmation model wit
 - **Data Storage Information** (expandable): Clarifies the separation between ephemeral audio files and persistent scan metadata in Firestore.
 
 ### 3. User Choice
-- **Click "I Agree"**: Consent record is saved to browser storage, and the user enters the application.
+- **Click "I Agree"**: Saves `'true'` to `sessionStorage` under the user-scoped key `voxforensics_consent_${user.id}`, granting access to the forensic workspace.
 - **Click "I Don't Agree"**: Access is restricted until consent is granted.
 
 ---
 
 ## 🔐 Consent Storage & Verification
 
-### Storage Location
-- **Key**: `voxforensics_consent`
-- **Location**: Browser `localStorage`
-- **Format**:
-  ```json
-  {
-    "agreed": true,
-    "timestamp": "2026-09-25T10:30:00.000Z",
-    "version": "1.0.0"
-  }
-  ```
+### Storage Location & Scoping
+- **Storage**: Browser `sessionStorage`
+- **Key**: `voxforensics_consent_${user.id}` (scoped per user UID)
+- **Value**: String `'true'`
+
+### Lifecycle & Session Management
+- **Page Refreshes**: `sessionStorage` persists consent across browser tab refreshes for the active session.
+- **Logout Cleansing**: When the user logs out (`!user`), the application cleanses `sessionStorage.removeItem('voxforensics_consent_' + previousUserId)` so consent is re-evaluated upon the next login session.
+- **Admin Accounts**: Administrator accounts automatically evaluate `hasConsented = true` upon login.
 
 ### Revocation
-Users can revoke their consent at any time via the User Dashboard:
-- Deletes the `voxforensics_consent` entry from browser storage.
-- Requires re-acceptance of the agreement upon the next scan attempt.
+Users can revoke their consent via the User Dashboard:
+- Invokes `revokeConsent()`, which removes `voxforensics_consent_${user.id}` from `sessionStorage` and sets `hasConsented = false`.
+- Displays the consent agreement again before subsequent audio analyses.
+- The Admin Dashboard additionally includes a client cache reset button clearing legacy and session cache keys.
 
 ---
 

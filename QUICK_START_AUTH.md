@@ -33,14 +33,14 @@ Access:   Audio scanning, Batch Processing, Scan History, User Dashboard
 #### Option B: Register a New Account
 1. Click **"Register"** on the authentication card.
 2. Enter your Name, Email, and Password (minimum 6 characters).
-3. *(Optional)* Enter a referral code (e.g., `VF-USER001` or `VF-ADMIN01`).
+3. *(Optional)* Enter a referral code (e.g., `VOX-USER01` or `VOX-ADMIN01`).
 4. Click **"Create Account"**.
 5. Check your email for the verification link.
 6. Choose whether to enable **Email OTP Two-Factor Authentication (MFA)**.
 
 ### Step 3: Accept Legal Consent & Start Scanning
-1. On first login, review the **Voice Data Usage Agreement & Privacy Consent**.
-2. Check the confirmation box and click **"I Agree"**.
+1. On first login as a standard user, review the **Voice Data Usage Agreement & Privacy Consent** (admin accounts bypass this step automatically).
+2. Check the confirmation box and click **"I Agree"** (stored in `sessionStorage` for the session).
 3. You now have access to the main VoxForensics application.
 4. Click **"👤 Dashboard"** in the top navigation bar to open your dashboard.
 5. Click **"🚪 Logout"** anytime to securely end your session.
@@ -68,7 +68,7 @@ VoxForensics utilizes an application-level Email OTP MFA system:
 ### 👤 User Dashboard (Standard Users)
 - **Profile Info**: Name, email, member since date, and role badge.
 - **Scan Analytics**: Total audio scans performed, deepfake/synthetic voices detected.
-- **Referral Program**: Your unique referral code (e.g. `VF-A1B2C3`), one-click copy button, and list of referred accounts.
+- **Referral Program**: Your unique referral code (e.g. `VOX-A1B2C3`), one-click copy button, and list of referred accounts.
 - **Security Status**: Email OTP MFA status indicator.
 - **Recent Scans**: Overview of recent audio scans with confidence scores.
 
@@ -87,7 +87,7 @@ VoxForensics utilizes an application-level Email OTP MFA system:
 ## 🎁 Referral Program
 
 1. Open your **User Dashboard**.
-2. Locate your unique referral code (e.g., `VF-USER001`).
+2. Locate your unique referral code (e.g., `VOX-XXXXXX`).
 3. Click **"Copy"** to copy the code to your clipboard.
 4. When a new user registers using your code, their profile is permanently linked (`referredBy`), and your referral count updates in real time.
 
@@ -104,8 +104,8 @@ VoxForensics utilizes an application-level Email OTP MFA system:
 - Check your email inbox (including spam/junk folder) for the verification link from Firebase, click the link, and retry login.
 
 ### "OTP code expired or invalid"
-- Email OTP codes expire after 10 minutes.
-- If expired or typed incorrectly more than 5 times, click **"Resend Code"** (available after the 60-second cooldown).
+- Email OTP codes expire after 5 minutes.
+- If expired or typed incorrectly more than 5 times, click **"Resend Code"** (available after the 30-second cooldown).
 
 ### "Can't access Admin Dashboard"
 - Ensure you are logged in with an administrator account (`admin@voxforensics.com`).

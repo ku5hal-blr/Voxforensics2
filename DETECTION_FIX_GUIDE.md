@@ -23,9 +23,9 @@ FastAPI Server (ml/api.py :8000)
      ▼
 Feature Extractor (ml/predict.py)
      │
-     │ 3. 48 Extracted Acoustic Features (librosa, soundfile)
+     │ 3. 45 Extracted Acoustic Features (librosa, soundfile)
      ▼
-Random Forest Model (models/random_forest_model.pkl)
+Random Forest Model (ml/models/deepfake_detector.joblib)
      │
      │ 4. Ensemble Decision Tree Classification
      ▼
@@ -49,17 +49,17 @@ Frontend Results Display & PDF Report
    - Provides OpenAPI/Swagger documentation at `/docs`.
 
 2. **`ml/predict.py`**:
-   - Contains audio preprocessing and 48-feature acoustic extraction using `librosa` and `soundfile`.
+   - Contains audio preprocessing and 45-feature acoustic extraction using `librosa` and `soundfile`.
    - Normalizes audio sample rates to 16,000 Hz mono.
    - Extracts:
-     - 13 Mel-Frequency Cepstral Coefficients (MFCCs) with means and standard deviations.
-     - Spectral Centroid, Rolloff, Flux, and Flatness.
-     - Zero-Crossing Rate (ZCR) and RMS Energy.
-     - Pitch (Fundamental Frequency $F_0$) statistics (mean, std, min, max, range).
-     - Harmonic-to-Noise Ratio (HNR) and voice periodicity.
+     - 13 Mel-Frequency Cepstral Coefficients (MFCCs 1-13) with means and standard deviations (26 features).
+     - Spectral Centroid, Rolloff, Bandwidth, and Flatness means & stds (8 features).
+     - Zero-Crossing Rate (ZCR) and RMS Energy means & stds (4 features).
+     - Chroma mean & std, and Tempo (3 features).
+     - Pitch (Fundamental Frequency $F_0$) statistics (mean, std, min, max) (4 features).
    - Loads the serialized model via `joblib.load()` and evaluates input feature vectors.
 
-3. **`models/random_forest_model.pkl`**:
+3. **`ml/models/deepfake_detector.joblib`**:
    - Serialized scikit-learn Random Forest Classifier trained on authenticated human voice recordings and synthetic AI voice clones.
    - Evaluates input feature vectors across decision trees to calculate real vs. synthetic class probabilities.
 
@@ -112,8 +112,19 @@ Earlier prototypes of VoxForensics explored client-side Web Audio API signal pro
 
 ---
 
-## 🚢 Upcoming Production Deployment Plan
+## ☁️ Production Deployment & Cloud Run Integration
 
-In the upcoming production phase:
-1. The FastAPI backend will be containerized via Docker and deployed to **Google Cloud Run** with managed auto-scaling and HTTPS termination.
-2. The frontend environment configuration (`VITE_ML_API_URL`) will be updated to point directly to the Cloud Run service URL.
+The VoxForensics Machine Learning backend is configured for both local development and production cloud execution:
+
+1. **Google Cloud Run Deployment**:
+   - The FastAPI service is containerized via `ml/Dockerfile` using `python:3.10-slim` with `ffmpeg` installed.
+   - Deployed on **Google Cloud Run**: `https://voxforensics-ml-220640941248.us-central1.run.app`.
+   - Automatically handles HTTPS termination, auto-scaling, and container lifecycle.
+
+2. **Frontend Dynamic API Binding**:
+   - The React frontend dynamically resolves the ML API base URL via `import.meta.env.VITE_ML_API_URL`:
+     ```typescript
+     const endpoint = `${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict`;
+     ```
+   - In production, `.env.production` sets `VITE_ML_API_URL=https://voxforensics-ml-220640941248.us-central1.run.app`.
+   - In local development, defaults to `http://127.0.0.1:8000` (documented in `.env.example`).

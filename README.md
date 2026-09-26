@@ -20,12 +20,13 @@
 
 ## ✨ Key Features
 
-- 🤖 **Random Forest ML Detection**: High-accuracy deepfake detection powered by a trained Random Forest model (`models/random_forest_model.pkl`) and FastAPI backend (`ml/api.py`).
-- 🔬 **48 Acoustic Features**: Comprehensive feature extraction including MFCCs, spectral centroid, spectral rolloff, spectral flux, zero-crossing rate, pitch variability, and harmonicity.
+- 🤖 **Random Forest ML Detection**: High-accuracy deepfake detection powered by a trained Random Forest model (`ml/models/deepfake_detector.joblib`) and FastAPI backend (`ml/api.py`).
+- 🔬 **45 Acoustic Features**: Comprehensive feature extraction including MFCCs (1–13 mean & std), spectral centroid, spectral rolloff, spectral bandwidth, spectral flatness, zero-crossing rate, RMS energy, chroma, tempo, and fundamental pitch statistics.
 - 🎙️ **Microphone Recording**: Direct in-browser microphone recording with real-time waveform visualizer bars and simulated fallback.
 - 📁 **Audio Upload Support**: Drag-and-drop or file picker upload supporting WAV, MP3, OGG, FLAC, and M4A up to 50 MB.
 - 📦 **Batch Processing**: Dedicated top-level tab for queuing multiple audio files with sequential non-blocking analysis, live progress tracking, and per-file PDF downloads.
 - 📄 **Forensic PDF Reports**: Client-side PDF generation using jsPDF featuring branded headers, verdict banners, confidence bars, acoustic tables, evidentiary disclaimers, and **embedded audio waveforms**.
+- 📱 **Mobile-Responsive UI**: Fully responsive interface supporting viewports from 320px–430px mobile up to desktop, featuring a mobile slide-down hamburger drawer, non-wrapping action controls, and horizontal-scroll data tables.
 - 🔐 **Firebase Authentication & MFA**:
   - Email and password authentication with email verification.
   - Application-level **Email OTP Two-Factor Authentication (MFA)** with cryptographically secure random codes, SHA-256 salted hashing, 10-minute expiry, 60-second resend cooldown, and 5-attempt limits.
@@ -35,8 +36,8 @@
   - **User Dashboard**: Personal scan statistics, referral code sharing, security status, and scan history.
 - 🛡️ **Secure Cloud Functions**: Dedicated callable Firebase Cloud Function (`deleteUserAccount` in `us-central1`) using Firebase Admin SDK with server-side admin verification, self-deletion prevention, and primary admin account protection (`admin@voxforensics.com`).
 - 🕒 **Scan History**: Full persistent history tracking in Firestore with local caching and individual/bulk deletion.
-- 🎁 **Referral Program**: Unique referral codes (`VF-XXXXXX`) tracked across user profiles.
-- 📋 **Legal Consent System**: Simplified GDPR/BIPA compliant agreement modal with single-checkbox confirmation and expandable policy sections.
+- 🎁 **Referral Program**: Unique referral codes (`VOX-XXXXXX`) tracked across user profiles.
+- 📋 **Legal Consent System**: Simplified GDPR/BIPA compliant agreement modal with single-checkbox confirmation and expandable policy sections (sessionStorage per-user lifecycle; admin bypass).
 - 🌌 **Cyberpunk 3D Visuals**: Three.js particle face silhouette, glowing sine wave visualizers, and glassmorphic UI components.
 
 ---
@@ -47,7 +48,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                    VoxForensics Frontend                        │
 │             React 18 + TypeScript + Vite + Three.js             │
-│        (Home • Scanner • Batch • History • User/Admin Dash)     │
+│   (Home • Scanner • Batch • History • User/Admin Dash • Mobile) │
 └──────────────┬──────────────────────────────────┬───────────────┘
                │ (Audio Payload / multipart)      │ (Auth / Scans / Roles)
                ▼                                  ▼
@@ -56,12 +57,12 @@
 │     FastAPI + Python 3.10+    │  │  Firebase Auth (Email/Pass)  │
 │  Endpoint: POST /predict      │  │  Firestore Database          │
 │  ├─ librosa & soundfile       │  │  ├─ /users                   │
-│  ├─ 48 Acoustic Features      │  │  ├─ /scans                   │
+│  ├─ 45 Acoustic Features      │  │  ├─ /scans                   │
 │  └─ Random Forest Classifier  │  │  ├─ /email_otp_sessions      │
-│     (random_forest_model.pkl) │  │  └─ /mail (Trigger Email)    │
-└───────────────────────────────┘  │  Cloud Functions             │
-                                   │  └─ deleteUserAccount        │
-                                   └──────────────────────────────┘
+│     (deepfake_detector.joblib)│  │  └─ /mail (Trigger Email)    │
+│  Deployed on Google Cloud Run │  │  Cloud Functions             │
+│  or local :8000 via Vite env  │  │  └─ deleteUserAccount        │
+└───────────────────────────────┘  └──────────────────────────────┘
 ```
 
 ---
@@ -156,9 +157,9 @@ Voxforensics2-1/
 │   ├── utils/
 │   │   ├── analysis.ts              # Client-side audio processing & legacy DSP utilities
 │   │   └── generateAnalysisPDF.ts   # Client-side jsPDF generator with waveform
-│   ├── App.tsx                      # Primary application controller & tab router
+│   ├── App.tsx                      # Primary application controller, responsive navigation & tab router
 │   ├── firebase.ts                  # Firebase client SDK initialization
-│   ├── index.css                    # Design system styles & glassmorphic classes
+│   ├── index.css                    # Design system styles, responsive classes & glassmorphism
 │   └── main.tsx                     # Application React DOM root
 ├── functions/
 │   ├── src/
@@ -166,16 +167,19 @@ Voxforensics2-1/
 │   ├── package.json                 # Firebase Functions dependencies
 │   └── tsconfig.json                # Functions TypeScript configuration
 ├── ml/
-│   ├── .venv/                       # Python virtual environment
+│   ├── models/
+│   │   └── deepfake_detector.joblib # Serialized Random Forest model artifact
+│   ├── .dockerignore                # Docker build ignore rules
+│   ├── Dockerfile                   # Cloud Run container definition
 │   ├── api.py                       # FastAPI application & /predict endpoint
-│   ├── predict.py                   # Feature extraction & model inference logic
-│   └── requirements.txt             # Python ML dependencies
-├── models/
-│   └── random_forest_model.pkl      # Trained Random Forest deepfake detection model
+│   ├── predict.py                   # 45-feature extraction & model inference logic
+│   └── requirements.txt             # Python ML dependencies (scikit-learn, librosa, etc.)
 ├── public/                          # Static public web assets
+├── .env.example                     # Environment template (VITE_ML_API_URL)
+├── firebase.json                    # Firebase configuration (Hosting, Functions, Firestore)
 ├── firestore.rules                  # Firestore security rules
 ├── package.json                     # Frontend npm dependencies & build scripts
-├── vite.config.ts                   # Vite configuration
+├── vite.config.js                   # Vite configuration
 └── README.md                        # Primary project documentation
 ```
 
@@ -185,14 +189,15 @@ Voxforensics2-1/
 
 1. **Audio Input**: User uploads a file (up to 50 MB) or records voice via browser microphone.
 2. **Audio Decoding**: Web Audio API decodes audio into an in-memory `AudioBuffer` for real-time waveform display.
-3. **ML Inference**: The audio file is submitted via multipart `FormData` to the FastAPI backend at `http://127.0.0.1:8000/predict`.
+3. **ML Inference**: The audio file is submitted via multipart `FormData` to the FastAPI backend (calling `${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict`).
 4. **Feature Extraction (`ml/predict.py`)**:
-   - 48 distinct acoustic properties extracted via `librosa` and `soundfile`.
-   - MFCCs (coefficients 1–13, means, and standard deviations).
-   - Spectral Centroid, Rolloff, Flux, and Flatness.
-   - Zero-Crossing Rate (ZCR) and RMS Energy.
-   - Fundamental Frequency (F0/pitch) statistics and Harmonic-to-Noise Ratio (HNR).
-5. **Random Forest Classification**: Extracted features are evaluated by `models/random_forest_model.pkl`.
+   - 45 distinct acoustic properties extracted via `librosa` and `soundfile`.
+   - MFCCs (coefficients 1–13, means and standard deviations — 26 features).
+   - Spectral Centroid, Rolloff, Bandwidth, and Flatness means and standard deviations (8 features).
+   - Zero-Crossing Rate (ZCR) and RMS Energy means and standard deviations (4 features).
+   - Chroma mean & standard deviation, and Tempo (3 features).
+   - Fundamental pitch ($F_0$) statistics: mean, standard deviation, minimum, and maximum (4 features).
+5. **Random Forest Classification**: Extracted features are evaluated by `ml/models/deepfake_detector.joblib`.
 6. **Verdict & Probabilities**:
    - Binary Classification: `REAL` vs `FAKE`.
    - Confidence score percentage (0–100%).
@@ -203,21 +208,23 @@ Voxforensics2-1/
 
 ---
 
-## 🚢 Upcoming Production Deployment Plan
+## ☁️ Production Deployment & Cloud Architecture
 
-The current setup operates locally. The production deployment plan involves:
+VoxForensics is architected for dual-environment execution (local development and cloud production):
 
-1. **Deploy ML Backend to Google Cloud Run**:
-   - Containerize `ml/` with Docker.
-   - Deploy container to Google Cloud Run (HTTPS endpoint).
-2. **Configure Frontend Production Environment**:
-   - Configure `VITE_ML_API_URL` pointing to the secure Cloud Run service.
-3. **Deploy Firebase Cloud Functions**:
-   - Deploy `deleteUserAccount` to Firebase (`firebase deploy --only functions`).
-4. **Deploy Frontend Web Application**:
-   - Build via `npm run build` and deploy to Firebase Hosting or Google Cloud Run.
-5. **Authorize Production Domains**:
-   - Register production domain in Firebase Authentication Console.
+1. **Google Cloud Run (Machine Learning API)**:
+   - Containerized via `ml/Dockerfile` using `python:3.10-slim` with `ffmpeg` installed.
+   - Deployed on **Google Cloud Run**: `https://voxforensics-ml-220640941248.us-central1.run.app`.
+   - Auto-scaling container serving `POST /predict` and `GET /health` with managed HTTPS.
+
+2. **Frontend Deployment & Firebase Hosting**:
+   - Built to static output via `npm run build` targeting `dist/`.
+   - Configured in `firebase.json` with SPA routing rewrites (`** -> /index.html`).
+   - Dynamic ML API resolution via `import.meta.env.VITE_ML_API_URL` (configured via `.env.production` in production and `.env.example` template).
+
+3. **Firebase Cloud Functions & Firestore**:
+   - Cloud Function `deleteUserAccount` deployed in `us-central1` on Node.js 20.
+   - Firestore security rules in `firestore.rules` governing collections `/users`, `/scans`, `/email_otp_sessions`, and `/mail`.
 
 ---
 

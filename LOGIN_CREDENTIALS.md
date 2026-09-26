@@ -25,15 +25,13 @@ Password: admin123
 
 ## 👤 Standard User Demonstration Flow
 
-For standard user evaluation, **no pre-created, hardcoded, or permanent demo user account exists in Firebase**. 
-
-The evaluator can demonstrate the complete real-world user lifecycle directly through the application's authentication flow:
+For standard user evaluation, evaluators can either sign in with an existing standard test account (`user@example.com` / `user123`) or demonstrate the complete real-world user registration lifecycle:
 
 1. **Register a New Account**:
    - Open the application at `http://localhost:3000`.
    - Click **"Register"** on the authentication modal.
    - Enter a Name, valid Email address, and Password (minimum 6 characters).
-   - *(Optional)* Enter an active referral code (e.g., `VF-ADMIN01`).
+   - *(Optional)* Enter an active referral code (e.g., `VOX-ADMIN01`).
    - Click **"Create Account"**.
 
 2. **Complete Email Verification**:
@@ -45,16 +43,15 @@ The evaluator can demonstrate the complete real-world user lifecycle directly th
    - During login, the application generates a cryptographically secure 6-digit Email OTP and dispatches it to the user's email.
    - Enter the 6-digit code on the OTP verification screen to complete authentication.
 
-4. **Demonstrating Features with the New User Account**:
-   - After successful authentication, the newly registered account serves as the active demo user account.
-   - The evaluator can now demonstrate all user-tier capabilities:
+4. **Demonstrating Features with the User Account**:
+   - After successful authentication, the evaluator can demonstrate all user-tier capabilities:
      - **Audio Analysis**: Drag-and-drop file upload (up to 50 MB) and live microphone recording with visualizer bars.
      - **Random Forest ML Classification**: Live inference returning real vs. fake verdicts, confidence percentages, and class probabilities.
      - **Batch Processing**: Queuing multiple audio files for sequential analysis with live progress tracking and error isolation.
      - **Forensic PDF Reports**: Downloading evidentiary reports featuring embedded audio waveforms.
      - **Scan History**: Viewing persistent scan records in Firestore with individual or bulk deletion.
      - **User Dashboard**: Viewing personal scan metrics, security settings, and referral program status.
-     - **Referral Program**: Accessing and sharing the account's unique referral code (`VF-XXXXXX`).
+     - **Referral Program**: Accessing and sharing the account's unique referral code (`VOX-XXXXXX`).
 
 ---
 
@@ -68,8 +65,8 @@ The evaluator can demonstrate the complete real-world user lifecycle directly th
 4. Click **"👤 Dashboard"** in the top navigation bar to open the **Admin Dashboard**.
 
 ### To Sign In as a Standard User:
-1. Follow the registration and email verification steps described above.
-2. Enter your registered credentials on the login screen.
+1. Either use existing credentials (`user@example.com` / `user123`) or follow the registration steps above.
+2. Enter the credentials on the login screen.
 3. Complete the Email OTP step when prompted.
 4. Click **"👤 Dashboard"** in the top navigation bar to open the **User Dashboard**.
 
@@ -77,10 +74,10 @@ The evaluator can demonstrate the complete real-world user lifecycle directly th
 
 ## 🎁 Active Referral Code for Testing Registration
 
-When demonstrating user registration with referral tracking, the evaluator can use the active administrator referral code:
-- **Referral Code:** `VF-ADMIN01`
+When demonstrating user registration with referral tracking, the evaluator can use the administrator referral code:
+- **Referral Code:** `VOX-ADMIN01`
 
-Entering this code during registration links the new user profile (`referredBy: "VF-ADMIN01"`) and updates the administrator's referral statistics.
+Entering this code during registration links the new user profile (`referredBy: "VOX-ADMIN01"`) and updates the administrator's referral statistics.
 
 ---
 

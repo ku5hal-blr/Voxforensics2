@@ -172,26 +172,26 @@ export default function AdminDashboard({
     <div className="min-h-screen" style={{ background: '#030712' }}>
       {/* Header */}
       <header className="border-b border-white/10 bg-black/40 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-lg sm:text-xl font-bold text-white">
               🛡️ Admin Dashboard
             </h1>
 
-            <span className="px-2 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-xs text-purple-300">
+            <span className="px-2 py-0.5 sm:py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-xs text-purple-300">
               Admin
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
+            <span className="text-xs sm:text-sm text-gray-400">
               Welcome, {currentUser.name}
             </span>
 
             {/* Go to Main Page */}
             <button
               onClick={onBack}
-              className="neon-btn text-xs py-2 px-4"
+              className="neon-btn text-xs py-2 px-3 sm:px-4"
             >
               🏠 Main Page
             </button>
@@ -199,7 +199,7 @@ export default function AdminDashboard({
             {/* Logout */}
             <button
               onClick={onLogout}
-              className="neon-btn neon-btn-danger text-xs py-2 px-4"
+              className="neon-btn neon-btn-danger text-xs py-2 px-3 sm:px-4"
             >
               🚪 Logout
             </button>
@@ -207,15 +207,15 @@ export default function AdminDashboard({
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
         {/* Tabs */}
-        <div className="flex gap-2 mb-8">
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2 max-w-full no-scrollbar">
           {(['overview', 'users', 'analytics', 'settings'] as const).map(
             (tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 rounded-xl border font-medium text-sm transition-all capitalize ${
+                className={`whitespace-nowrap flex-shrink-0 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border font-medium text-xs sm:text-sm transition-all capitalize ${
                   activeTab === tab
                     ? 'tab-active'
                     : 'border-white/10 text-gray-400 hover:text-white hover:border-white/20 bg-white/5'
@@ -382,23 +382,23 @@ export default function AdminDashboard({
                 users.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4 rounded-xl bg-white/5 border border-white/5"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
 
-                    <div>
-                      <p className="text-sm font-medium text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-white truncate">
                         {user.name}
                       </p>
 
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-400 truncate">
                         {user.email}
                       </p>
 
-                      <div className="flex gap-2 mt-1">
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
                         <span
                           className={`text-xs px-2 py-0.5 rounded-full ${
                             user.role === 'admin'
@@ -424,10 +424,10 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5 w-full sm:w-auto justify-end">
                     <button
                       onClick={() => toggleUserRole(user.id)}
-                      className="neon-btn text-xs py-1 px-3"
+                      className="neon-btn text-xs py-1.5 px-3"
                     >
                       {user.role === 'admin'
                         ? '↓ Demote'
@@ -437,7 +437,7 @@ export default function AdminDashboard({
                     <button
                       onClick={() => deleteUser(user.id)}
                       disabled={deletingUserId === user.id}
-                      className="neon-btn neon-btn-danger text-xs py-1 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="neon-btn neon-btn-danger text-xs py-1.5 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {deletingUserId === user.id ? 'Deleting...' : '🗑️ Delete'}
                     </button>

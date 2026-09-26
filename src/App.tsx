@@ -68,7 +68,7 @@ const predictWithML = async (file: File) => {
 
   const response =
     await fetch(
-      'http://127.0.0.1:8000/predict',
+      `${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict`,
       {
         method: 'POST',
         body: formData,
@@ -272,6 +272,9 @@ function AppContent() {
     useState(false);
 
   const [showDashboard, setShowDashboard] =
+    useState(false);
+
+  const [mobileMenuOpen, setMobileMenuOpen] =
     useState(false);
 
   /*
@@ -1263,7 +1266,7 @@ function AppContent() {
 
             console.log(
               'Sending to:',
-              'http://127.0.0.1:8000/predict'
+              `${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict`
             );
 
             console.log(
@@ -3002,31 +3005,53 @@ function AppContent() {
 
       <nav className="border-b border-[#1a2a4a]/50 bg-[#050914]/80 backdrop-blur-md sticky top-0 z-50">
 
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between">
 
-          <div className="flex items-center gap-3">
+          {/* Left: Hamburger (mobile only) + Brand */}
+          <div className="flex items-center gap-2 sm:gap-3">
 
-            <div className="w-9 h-9 rounded-full bg-[#060d1f] border border-[#00d4ff]/50 flex items-center justify-center shadow-[0_0_14px_rgba(0,212,255,0.35)]">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="md:hidden w-9 h-9 rounded-lg bg-[#0d1830]/90 border border-[#23406e] flex items-center justify-center text-gray-300 hover:text-white transition flex-shrink-0"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+            >
+              <i className={`fa-solid ${mobileMenuOpen ? 'fa-xmark' : 'fa-bars'} text-sm`}></i>
+            </button>
 
-              <i className="fa-solid fa-wave-square text-[#00d4ff] text-sm"></i>
+            <div
+              onClick={() => {
+                setActiveTab('home');
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none"
+            >
 
-            </div>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#060d1f] border border-[#00d4ff]/50 flex items-center justify-center shadow-[0_0_14px_rgba(0,212,255,0.35)] flex-shrink-0">
 
-            <div>
+                <i className="fa-solid fa-wave-square text-[#00d4ff] text-xs sm:text-sm"></i>
 
-              <h2 className="text-lg font-bold tracking-tight text-white leading-tight">
-                VoxForensics
-              </h2>
+              </div>
 
-              <p className="text-[10px] text-gray-400 tracking-widest uppercase leading-tight">
-                Deepfake Audio Detector
-              </p>
+              <div>
+
+                <h2 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">
+                  VoxForensics
+                </h2>
+
+                <p className="text-[9px] sm:text-[10px] text-gray-400 tracking-widest uppercase leading-tight">
+                  Deepfake Audio Detector
+                </p>
+
+              </div>
 
             </div>
 
           </div>
 
-          <div className="flex items-center gap-1 overflow-x-auto py-1">
+          {/* Desktop Navigation Tabs (Hidden on mobile) */}
+          <div className="hidden md:flex items-center gap-1 overflow-x-auto py-1">
 
             {(
               [
@@ -3111,26 +3136,26 @@ function AppContent() {
           </div>
 
           {/* AUTH NAVIGATION */}
-
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
 
             {authLoading ? (
-              <div className="h-9 w-28 rounded-lg bg-white/5 animate-pulse" />
+              <div className="h-8 sm:h-9 w-20 sm:w-28 rounded-lg bg-white/5 animate-pulse" />
             ) : user ? (
               <>
 
                 <button
-                  onClick={() =>
+                  onClick={() => {
                     setShowDashboard(
                       true
-                    )
-                  }
-                  className="text-sm text-gray-400 hover:text-white transition"
+                    );
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-xs sm:text-sm text-gray-400 hover:text-white transition flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/5"
                 >
 
-                  <i className="fa-solid fa-user mr-2"></i>
+                  <i className="fa-solid fa-user"></i>
 
-                  {user.name}
+                  <span className="hidden sm:inline max-w-[120px] truncate">{user.name}</span>
 
                 </button>
 
@@ -3141,8 +3166,11 @@ function AppContent() {
                     setShowDashboard(
                       false
                     );
+                    setMobileMenuOpen(false);
                   }}
-                  className="text-sm text-gray-400 hover:text-white transition"
+                  className="text-xs sm:text-sm text-gray-400 hover:text-white transition px-2 py-1.5 rounded-lg hover:bg-white/5"
+                  title="Logout"
+                  aria-label="Logout"
                 >
                   <i className="fa-solid fa-right-from-bracket"></i>
                 </button>
@@ -3151,15 +3179,16 @@ function AppContent() {
             ) : (
 
               <button
-                onClick={() =>
+                onClick={() => {
                   setShowAuthModal(
                     true
-                  )
-                }
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#8b5cf6]/70 via-[#6366f1]/70 to-[#22d3ee]/70 border border-[#8b5cf6]/30 shadow-[0_0_16px_rgba(139,92,246,0.2)] hover:brightness-110 hover:shadow-[0_0_22px_rgba(139,92,246,0.35)] transition-all duration-300"
+                  );
+                  setMobileMenuOpen(false);
+                }}
+                className="whitespace-nowrap flex-shrink-0 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-[#8b5cf6]/70 via-[#6366f1]/70 to-[#22d3ee]/70 border border-[#8b5cf6]/30 shadow-[0_0_16px_rgba(139,92,246,0.2)] hover:brightness-110 hover:shadow-[0_0_22px_rgba(139,92,246,0.35)] transition-all duration-300"
               >
 
-                <i className="fa-solid fa-right-to-bracket mr-2"></i>
+                <i className="fa-solid fa-right-to-bracket mr-1.5 sm:mr-2"></i>
 
                 Login / Sign Up
 
@@ -3171,13 +3200,116 @@ function AppContent() {
 
         </div>
 
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-[#1a2a4a]/80 bg-[#050914]/95 backdrop-blur-xl px-4 py-4 space-y-2 shadow-2xl">
+
+            {(
+              [
+                'home',
+                'scanner',
+                'batch',
+                'history',
+                'about',
+              ] as TabType[]
+            ).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => {
+                  if (tab === 'history') {
+                    if (!requireAuthentication()) {
+                      setMobileMenuOpen(false);
+                      return;
+                    }
+                    setActiveTab('history');
+                    setMobileMenuOpen(false);
+                    return;
+                  }
+                  setActiveTab(tab);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full px-4 py-3 rounded-xl text-sm font-medium transition flex items-center justify-between border ${
+                  activeTab === tab
+                    ? 'text-white bg-[#0d1830] border-[#00d4ff]/40 shadow-[0_0_12px_rgba(0,212,255,0.15)]'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5 border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <i
+                    className={`text-sm ${
+                      tab === 'home'
+                        ? 'fa-solid fa-house'
+                        : tab === 'scanner'
+                        ? 'fa-solid fa-expand'
+                        : tab === 'batch'
+                        ? 'fa-solid fa-layer-group'
+                        : tab === 'history'
+                        ? 'fa-solid fa-clock-rotate-left'
+                        : 'fa-solid fa-circle-info'
+                    } ${activeTab === tab ? 'text-[#00d4ff]' : 'text-gray-400'}`}
+                  ></i>
+                  <span>
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </span>
+                </div>
+                {activeTab === tab && (
+                  <span className="w-2 h-2 rounded-full bg-[#00d4ff] shadow-[0_0_8px_#00d4ff]"></span>
+                )}
+              </button>
+            ))}
+
+            {user ? (
+              <div className="pt-3 mt-2 border-t border-[#1a2a4a]/50 space-y-2">
+                <button
+                  onClick={() => {
+                    setShowDashboard(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium text-white bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-user text-cyan-400"></i>
+                    <span>Dashboard ({user.name})</span>
+                  </div>
+                  <i className="fa-solid fa-chevron-right text-xs text-gray-500"></i>
+                </button>
+                <button
+                  onClick={() => {
+                    logout();
+                    setShowDashboard(false);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 flex items-center gap-3 transition"
+                >
+                  <i className="fa-solid fa-right-from-bracket text-red-400"></i>
+                  <span>Logout</span>
+                </button>
+              </div>
+            ) : (
+              <div className="pt-3 mt-2 border-t border-[#1a2a4a]/50">
+                <button
+                  onClick={() => {
+                    setShowAuthModal(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#22d3ee] flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(139,92,246,0.3)]"
+                >
+                  <i className="fa-solid fa-right-to-bracket"></i>
+                  <span>Login / Sign Up</span>
+                </button>
+              </div>
+            )}
+
+          </div>
+        )}
+
       </nav>
 
       {/* ================================================== */}
       {/* MAIN */}
       {/* ================================================== */}
 
-      <main className="max-w-7xl mx-auto px-6 pt-12 pb-20 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-12 pb-16 sm:pb-20 relative z-10">
 
         {/* ================================================== */}
         {/* HOME */}
@@ -3185,17 +3317,17 @@ function AppContent() {
 
         {activeTab ===
           'home' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
 
               {/* LEFT */}
 
-              <div className="space-y-8">
+              <div className="space-y-6 sm:space-y-8">
 
                 <div className="relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-[#00d4ff] via-[#a855f7] to-[#00ff88] shadow-[0_0_22px_rgba(0,212,255,0.3)]">
 
-                  <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-4 py-1.5 backdrop-blur-sm">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-[#050914]/75 px-3.5 sm:px-4 py-1.5 backdrop-blur-sm">
 
-                    <span className="text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
+                    <span className="text-[11px] sm:text-xs font-semibold tracking-widest text-[#00d4ff] uppercase">
                       AI • AUDIO • FORENSICS
                     </span>
 
@@ -3205,7 +3337,7 @@ function AppContent() {
 
                 <div>
 
-                  <h2 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-none mb-3">
+                  <h2 className="text-3xl sm:text-5xl lg:text-7xl font-extrabold tracking-tight leading-none mb-3">
 
                     <span className="hero-vox">
                       Vox
@@ -3217,13 +3349,13 @@ function AppContent() {
 
                   </h2>
 
-                  <h3 className="text-sm md:text-base tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
+                  <h3 className="text-xs sm:text-sm md:text-base tracking-[0.25em] sm:tracking-[0.3em] text-gray-300 font-light uppercase drop-shadow-md">
                     Deepfake Audio Detector
                   </h3>
 
                 </div>
 
-                <p className="text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold text-white leading-snug drop-shadow-md">
 
                   Is that voice{' '}
 
@@ -3245,22 +3377,22 @@ function AppContent() {
                   Upload a voice recording and VoxForensics will extract acoustic features and evaluate the clip using a trained machine learning model.
                 </p>
 
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full sm:w-auto">
 
                   <button
                     onClick={
                       handleSampleReal
                     }
-                    className="bg-gradient-to-r from-emerald-600 to-emerald-200 to-teal-400 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(16,185,129,0.3)] hover:shadow-[0_0_32px_rgba(16,185,129,0.45)] hover:brightness-110"
+                    className="w-full sm:w-auto justify-center bg-gradient-to-r from-emerald-600 to-emerald-200 to-teal-400 text-white font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(16,185,129,0.3)] hover:shadow-[0_0_32px_rgba(16,185,129,0.45)] hover:brightness-110 text-sm"
                   >
 
-                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
+                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center flex-shrink-0">
 
                       <i className="fa-solid fa-play text-[10px]"></i>
 
                     </span>
 
-                    Try sample: Real voice
+                    <span>Try sample: Real voice</span>
 
                   </button>
 
@@ -3268,16 +3400,16 @@ function AppContent() {
                     onClick={
                       handleSampleFake
                     }
-                    className="bg-gradient-to-r from-violet-700 to-purple-200 to-purple-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(168,85,247,0.3)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] hover:brightness-110"
+                    className="w-full sm:w-auto justify-center bg-gradient-to-r from-violet-700 to-purple-200 to-purple-500 text-white font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-[0_0_24px_rgba(168,85,247,0.3)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] hover:brightness-110 text-sm"
                   >
 
-                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center">
+                    <span className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center flex-shrink-0">
 
                       <i className="fa-solid fa-robot text-[11px]"></i>
 
                     </span>
 
-                    Try sample: AI clone
+                    <span>Try sample: AI clone</span>
 
                   </button>
 
@@ -3359,7 +3491,7 @@ function AppContent() {
 
               {/* RIGHT */}
 
-              <div className="space-y-4 relative">
+              <div className="space-y-4 relative overflow-hidden">
 
                 <div className="absolute -top-20 -right-20 w-96 h-96 bg-[#a855f7]/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -4621,18 +4753,18 @@ function AppContent() {
                             key={
                               record.id
                             }
-                            className="batch-item flex items-center justify-between"
+                            className="batch-item flex items-center justify-between gap-3"
                           >
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
 
                               <span
-                                className={`w-3 h-3 rounded-full ${verdictPresentation.dotClass}`}
+                                className={`w-3 h-3 rounded-full flex-shrink-0 ${verdictPresentation.dotClass}`}
                               ></span>
 
-                              <div>
+                              <div className="min-w-0 flex-1">
 
-                                <p className="text-white text-sm font-medium">
+                                <p className="text-white text-sm font-medium truncate" title={record.filename}>
                                   {
                                     record.filename
                                   }
@@ -4656,7 +4788,7 @@ function AppContent() {
 
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
 
                               <span className="text-gray-400 text-xs">
 
@@ -4756,7 +4888,7 @@ function AppContent() {
                       true
                     )
                   }
-                  className="neon-btn neon-btn-outline mt-4"
+                  className="neon-btn neon-btn-outline mt-4 w-full sm:w-auto justify-center"
                 >
 
                   <i className="fa-solid fa-flask mr-2"></i>
@@ -4779,9 +4911,9 @@ function AppContent() {
 
       <footer className="border-t border-[#1a2a4a]/50 bg-[#050914]/80 py-6 mt-12 relative z-10">
 
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-center md:text-left">
 
             <span className="font-bold text-white">
               VoxForensics

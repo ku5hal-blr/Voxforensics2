@@ -1,0 +1,67 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Version control & IDE metadata
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node & Frontend artifacts (when building from project root context)
+node_modules/
+dist/
+build/
+src/
+public/
+coverage/
+
+# Local training datasets and training-only scripts
+ml/features.csv
+features.csv
+ml/train_model.py
+train_model.py
+ml/extract_features.py
+extract_features.py
+ml/check_features.py
+check_features.py
+ml/download_dataset.py
+download_dataset.py
+
+# Local test audio files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+*.webm
+ml/*.wav
+ml/*.mp3
+ml/*.m4a
+ml/*.ogg
+ml/*.flac
+ml/*.webm
+
+# Local scratch and logs
+scratch/
+tmp/
+temp/
+*.log
+
+# CRITICAL: Preserve the trained Random Forest model artifact
+!ml/models/deepfake_detector.joblib
+!models/deepfake_detector.joblib

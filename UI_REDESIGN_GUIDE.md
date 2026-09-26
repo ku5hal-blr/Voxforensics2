@@ -34,14 +34,19 @@ VoxForensics features a modern visual design system tailored for forensic audio 
 - **Email OTP Input**: Clean 6-digit PIN input with resend countdown timer and attempt indicator.
 - **Role Routing**: Automatically routes administrators to admin capabilities and standard users to user views.
 
-### 2. Header & User Navigation Bar (`src/App.tsx`)
+### 2. Header & Responsive Navigation Bar (`src/App.tsx`)
 - **Brand Identity**: VoxForensics logo with glowing neon waveform icon.
-- **Top Navigation Tabs**:
+- **Desktop Navigation Tabs (`hidden md:flex`)**:
   - `Home`: Hero overview with quick upload, record, and sample demo buttons.
   - `Scanner`: Full forensic analysis interface with waveform and acoustic parameters.
   - `Batch`: Multi-file queuing, sequential analysis, and bulk report generation.
   - `History`: Persistent log of past scans with search and deletion controls.
   - `About`: Technical methodology, privacy information, and compliance details.
+- **Mobile Hamburger Drawer (`md:hidden`)**:
+  - Interactive hamburger toggle icon animating between open/close states.
+  - Slide-down glassmorphic drawer presenting all navigation links, active user badge, Dashboard link, and Logout button.
+  - Auto-dismisses upon selecting a navigation tab.
+- **Defensive Layout**: `whitespace-nowrap flex-shrink-0` applied to header action buttons (e.g. `Login / Sign Up`) to eliminate wrapping on narrow mobile screens (320px–430px).
 - **User Profile Pill**: Displays user name, role badge (`Admin` / `User`), **"👤 Dashboard"** button, and **"🚪 Logout"** button.
 
 ### 3. Audio Scanner & Results Panel
@@ -50,7 +55,7 @@ VoxForensics features a modern visual design system tailored for forensic audio 
 - **Waveform Canvas**: Canvas-rendered audio amplitude graph matching the verdict color scheme.
 - **Verdict Banner**: Bold authentic (`REAL VOICE`) or synthetic (`AI-GENERATED VOICE`) banner with confidence percentage.
 - **Probability Bars**: Dual distribution bars showing exact real vs. fake model probabilities.
-- **Acoustic Metric Grid**: 2x2 or 4x1 responsive grid showing MFCCs, Spectral Centroid, Pitch Variability, and Zero-Crossing Rate.
+- **Acoustic Metric Grid**: Displays key metrics from the 45-feature extraction pipeline (MFCCs, Spectral Centroid, Rolloff, Bandwidth, Flatness, RMS, ZCR, Chroma, Pitch).
 - **Forensic PDF Export**: Prominent **"Download PDF"** button generating an evidentiary report with embedded waveform graphics.
 
 ### 4. Batch Processing Queue (`src/components/BatchProcessing.tsx`)

@@ -91,21 +91,25 @@ Voxforensics2-1/
 │   ├── components/          # Auth, Admin, User Dashboard, Batch, Background
 │   ├── services/            # Email OTP service, Firestore history service
 │   ├── utils/               # PDF generator with waveform, audio helpers
-│   ├── App.tsx              # Main controller & tab router
+│   ├── App.tsx              # Main controller, responsive drawer & tab router
 │   ├── firebase.ts          # Client Firebase SDK configuration
-│   └── index.css            # Design system & glassmorphic styling
+│   └── index.css            # Design system, responsive classes & styling
 ├── ml/                      # Python ML backend
+│   ├── models/              # Model artifacts
+│   │   └── deepfake_detector.joblib # Serialized Random Forest classifier
+│   ├── .dockerignore        # Docker build ignore rules
+│   ├── Dockerfile           # Cloud Run Docker container specification
 │   ├── api.py               # FastAPI server & /predict endpoint
-│   ├── predict.py           # 48-feature acoustic extraction pipeline
+│   ├── predict.py           # 45-feature acoustic extraction pipeline
 │   └── requirements.txt     # Python dependencies
-├── models/                  # Trained model artifacts
-│   └── random_forest_model.pkl # Serialized Random Forest classifier
 ├── functions/               # Firebase Cloud Functions (Node 20)
 │   ├── src/index.ts         # deleteUserAccount callable function
 │   └── package.json         # Cloud Functions dependencies
+├── .env.example             # Environment template (VITE_ML_API_URL)
+├── firebase.json            # Firebase Hosting, Functions & Firestore config
 ├── firestore.rules          # Firestore database security rules
 ├── package.json             # Frontend npm dependencies & build scripts
-├── vite.config.ts           # Vite build configuration
+├── vite.config.js           # Vite build configuration
 └── README.md                # Main repository documentation
 ```
 

@@ -77,9 +77,10 @@ npm run build
 - [ ] **MFA**: Verify Email OTP generation, 60s cooldown, and 5-attempt limits.
 - [ ] **Audio Upload**: Upload WAV, MP3, and M4A files up to 50 MB.
 - [ ] **Microphone Recording**: Test in-browser recording with real-time waveform bars.
-- [ ] **ML Analysis**: Confirm results return from `http://127.0.0.1:8000/predict` with confidence and probabilities.
+- [ ] **ML Analysis**: Confirm results return from `${import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000'}/predict` with confidence and 45 acoustic metrics.
 - [ ] **Batch Processing**: Queue multiple files and confirm non-blocking sequential execution.
 - [ ] **PDF Export**: Generate a PDF report and ensure the waveform graph renders cleanly.
+- [ ] **Mobile Responsiveness**: Verify hamburger drawer navigation and responsive layouts across 320px–430px mobile viewports.
 - [ ] **Admin Dashboard**: Test user role updates and Cloud Function user deletion safeguards.
 
 ---

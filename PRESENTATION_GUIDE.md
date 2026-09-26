@@ -18,7 +18,7 @@
 ### Slide 2: Abstract
 - Addresses the rising threat of synthetic voice generation and AI voice cloning (e.g. ElevenLabs, neural vocoders).
 - Introduces VoxForensics: A production-grade system combining high-performance **Random Forest Machine Learning**, **Firebase Cloud Infrastructure**, and a **React & Three.js forensic interface**.
-- Key achievements: 48-feature acoustic analysis, real-time waveform visualization, batch processing, and evidentiary PDF reporting.
+- Key achievements: 45-feature acoustic analysis, real-time waveform visualization, batch processing, and evidentiary PDF reporting.
 
 ### Slide 3: Problem Statement
 - **Deepfake Threat Landscape**: CEO voice fraud, social engineering attacks, synthetic disinformation in elections, and identity spoofing.
@@ -26,19 +26,20 @@
 - **Need for Specialized Tools**: Organizations and law enforcement require automated forensic tools with quantifiable confidence scores and audit trails.
 
 ### Slide 4: System Architecture
-- **Tier 1 (Frontend)**: React 18, TypeScript, Vite, Tailwind CSS, Three.js 3D particle canvas.
+- **Tier 1 (Frontend)**: React 18, TypeScript, Vite, Tailwind CSS, Three.js 3D particle canvas, and mobile-responsive drawer navigation.
 - **Tier 2 (ML Backend)**: Python FastAPI server serving `POST /predict`, normalizing audio to 16 kHz mono.
-- **Tier 3 (Inference Engine)**: 48-feature acoustic extraction pipeline (librosa, soundfile) paired with a trained `Random Forest Classifier` (`models/random_forest_model.pkl`).
+- **Tier 3 (Inference Engine)**: 45-feature acoustic extraction pipeline (librosa, soundfile) paired with a trained `Random Forest Classifier` (`ml/models/deepfake_detector.joblib`).
 - **Tier 4 (Cloud Infrastructure)**: Firebase Authentication, Cloud Firestore (`/users`, `/scans`, `/email_otp_sessions`, `/mail`), and callable Cloud Functions (`deleteUserAccount` in Node 20).
 
-### Slide 5: Acoustic Feature Extraction (48 Features)
-- **Mel-Frequency Cepstral Coefficients (MFCCs 1–13)**: Mean and variance representing vocal tract resonance.
-- **Spectral Features**: Centroid (brightness), Rolloff (high-frequency decay), Flux (temporal rate of change), and Flatness (noise vs. tone).
-- **Temporal & Energy Metrics**: Zero-Crossing Rate (ZCR) and RMS Energy.
-- **Pitch & Periodicity**: Fundamental Frequency ($F_0$) statistics and Harmonic-to-Noise Ratio (HNR).
+### Slide 5: Acoustic Feature Extraction (45 Features)
+- **Mel-Frequency Cepstral Coefficients (MFCCs 1–13)**: Mean and standard deviation representing vocal tract resonance (26 features).
+- **Spectral Features**: Centroid, Rolloff, Bandwidth, Flatness means & standard deviations (8 features).
+- **Temporal & Energy Metrics**: Zero-Crossing Rate (ZCR) and RMS Energy means & standard deviations (4 features).
+- **Chroma & Rhythm**: Chroma mean & standard deviation, and Tempo (3 features).
+- **Pitch Statistics**: Fundamental pitch mean, standard deviation, minimum, and maximum (4 features).
 
 ### Slide 6: Machine Learning Pipeline
-- Trained Random Forest model evaluates the 48-dimensional feature vector.
+- Trained Random Forest model evaluates the 45-dimensional feature vector.
 - Generates binary classification verdict (`REAL` vs `FAKE`).
 - Computes calibrated confidence percentages and real/fake probability distributions.
 - *Note on Architecture*: Early prototypes explored browser-only DSP heuristics (`src/utils/analysis.ts`), but current production inference is powered by the Python Random Forest model.
@@ -89,11 +90,12 @@
   4. Instant PDF report download with embedded waveform.
   5. User Dashboard referral code sharing.
 
-### Slide 13: Future Scope & Production Roadmap
-- **Upcoming Production Deployment**:
-  1. Containerize FastAPI backend with Docker and deploy to **Google Cloud Run**.
-  2. Update frontend configuration (`VITE_ML_API_URL`) to use HTTPS Cloud Run endpoint.
-  3. Deploy Cloud Functions and frontend to production hosting.
+### Slide 13: Production Architecture & Future Scope
+- **Production Cloud Architecture (Live)**:
+  1. FastAPI backend containerized via Docker and deployed to **Google Cloud Run** (`https://voxforensics-ml-220640941248.us-central1.run.app`).
+  2. Dynamic frontend API configuration using `import.meta.env.VITE_ML_API_URL`.
+  3. Production Firebase Hosting configured in `firebase.json` (`dist` with SPA routing).
+  4. Firebase Cloud Functions (`deleteUserAccount`) on Node.js 20 in `us-central1`.
 - **Future Enhancements**: Deep learning transformer models (Wav2Vec 2.0 / Whisper representations), real-time streaming WebSockets, and multi-speaker diarization.
 
 ### Slide 14: Conclusion
@@ -104,7 +106,7 @@
 
 ## 💡 Practical Presentation Tips
 
-1. **Start Both Services First**: Make sure Uvicorn (`python -m uvicorn ml.api:app --reload --port 8000`) and Vite (`npm run dev`) are running before the presentation begins.
-2. **Have Both Demo Accounts Ready**: Use `admin@voxforensics.com` to demonstrate admin features and `user@example.com` to demonstrate scanning.
+1. **Start Services First (Local Testing)**: Make sure Uvicorn (`python -m uvicorn ml.api:app --reload --port 8000`) and Vite (`npm run dev`) are running before the presentation begins. Alternatively, demonstrate with the deployed Google Cloud Run ML API.
+2. **Have Both Accounts Ready**: Use `admin@voxforensics.com` to demonstrate admin features and `user@example.com` to demonstrate scanning.
 3. **Show the PDF Report**: Open a generated PDF in Adobe Reader or browser to highlight the embedded waveform graph and forensic formatting.
-4. **Clarify Cloud Run Status**: Clearly state that local development is fully working and deployment to Google Cloud Run is the upcoming production step.
+4. **Demonstrate Mobile Responsiveness**: Switch Chrome DevTools to a mobile viewport (e.g., iPhone 14) to showcase the hamburger drawer and responsive UI.
