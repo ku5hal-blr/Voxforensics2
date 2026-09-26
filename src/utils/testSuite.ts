@@ -6,7 +6,8 @@ interface TestResult {
   confidence?: number;
 }
 
-const API_URL = 'http://127.0.0.1:8000';
+const API_URL =
+  import.meta.env.VITE_ML_API_URL || 'http://127.0.0.1:8000';
 
 interface HealthResponse {
   status: string;
@@ -47,9 +48,32 @@ async function predictTestAudio(
     throw new Error(`Could not load test audio: HTTP ${response.status}`);
   }
 
-  const blob = await response.blob();
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      `E2E fixture is not a valid WAV file: received HTML response (SPA fallback for ${path})`
+    );
+  }
 
-  const file = new File([blob], filename, {
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength < 44) {
+    throw new Error(
+      `E2E fixture is not a valid WAV file: size too small (${arrayBuffer.byteLength} bytes)`
+    );
+  }
+
+  const bytes = new Uint8Array(arrayBuffer);
+  const riff = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+  const wave = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+
+  if (riff !== 'RIFF' || wave !== 'WAVE') {
+    throw new Error(
+      `E2E fixture is not a valid WAV file: missing RIFF/WAVE header`
+    );
+  }
+
+  const file = new File([arrayBuffer], filename, {
     type: 'audio/wav',
   });
 
