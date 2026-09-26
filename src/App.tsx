@@ -187,6 +187,37 @@ function AppContent() {
     localStorage.setItem('vox_active_tab', activeTab);
   }, [activeTab]);
 
+  /*
+   * Centralized Logout Handler:
+   * Clears auth session, resets active tab to 'home', closes dashboards/drawers
+   */
+  const handleLogout = useCallback(() => {
+    logout();
+    setActiveTab('home');
+    try {
+      localStorage.setItem('vox_active_tab', 'home');
+    } catch (e) {
+      console.warn('Could not save vox_active_tab to localStorage:', e);
+    }
+    setShowDashboard(false);
+    setMobileMenuOpen(false);
+  }, [logout]);
+
+  /*
+   * Protected page guard:
+   * If logged out after initialization, ensure history page resets to home
+   */
+  useEffect(() => {
+    if (!authLoading && !user && activeTab === 'history') {
+      setActiveTab('home');
+      try {
+        localStorage.setItem('vox_active_tab', 'home');
+      } catch (e) {
+        console.warn('Could not save vox_active_tab to localStorage:', e);
+      }
+    }
+  }, [user, authLoading, activeTab]);
+
   const [isRecording, setIsRecording] =
     useState(false);
 
@@ -238,6 +269,10 @@ function AppContent() {
   useEffect(() => {
     let isCancelled = false;
 
+    if (authLoading) {
+      return;
+    }
+
     if (!user?.id) {
       setHistory([]);
       return;
@@ -263,7 +298,7 @@ function AppContent() {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const [recordingTime, setRecordingTime] =
     useState(0);
@@ -507,7 +542,9 @@ function AppContent() {
       !previousUserRef.current &&
       user
     ) {
-      setShowDashboard(true);
+      if (showAuthModal || user.role === 'admin') {
+        setShowDashboard(true);
+      }
     }
 
     previousUserRef.current = user;
@@ -587,6 +624,10 @@ function AppContent() {
 
   const requireAuthentication =
     useCallback(() => {
+      if (authLoading) {
+        return false;
+      }
+
       if (!user) {
         setShowLoginRequiredModal(
           true
@@ -596,7 +637,7 @@ function AppContent() {
       }
 
       return true;
-    }, [user]);
+    }, [user, authLoading]);
 
   const openLogin = () => {
     setShowLoginRequiredModal(
@@ -2955,12 +2996,7 @@ function AppContent() {
       return (
         <AdminDashboard
           currentUser={user}
-          onLogout={() => {
-            logout();
-            setShowDashboard(
-              false
-            );
-          }}
+          onLogout={handleLogout}
           onBack={() =>
             setShowDashboard(
               false
@@ -2973,16 +3009,17 @@ function AppContent() {
     return (
       <UserDashboard
         currentUser={user}
-        onLogout={() => {
-          logout();
-          setShowDashboard(
-            false
-          );
-        }}
+        onLogout={handleLogout}
         onBack={() => {
           setShowDashboard(
             false
           );
+          setActiveTab('home');
+          try {
+            localStorage.setItem('vox_active_tab', 'home');
+          } catch (e) {
+            console.warn('Could not save vox_active_tab to localStorage:', e);
+          }
         }}
       />
     );
@@ -3160,14 +3197,7 @@ function AppContent() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    logout();
-
-                    setShowDashboard(
-                      false
-                    );
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={handleLogout}
                   className="text-xs sm:text-sm text-gray-400 hover:text-white transition px-2 py-1.5 rounded-lg hover:bg-white/5"
                   title="Logout"
                   aria-label="Logout"
@@ -3258,7 +3288,11 @@ function AppContent() {
               </button>
             ))}
 
-            {user ? (
+            {authLoading ? (
+              <div className="pt-3 mt-2 border-t border-[#1a2a4a]/50">
+                <div className="w-full h-11 rounded-xl bg-white/5 animate-pulse" />
+              </div>
+            ) : user ? (
               <div className="pt-3 mt-2 border-t border-[#1a2a4a]/50 space-y-2">
                 <button
                   onClick={() => {
@@ -3274,11 +3308,7 @@ function AppContent() {
                   <i className="fa-solid fa-chevron-right text-xs text-gray-500"></i>
                 </button>
                 <button
-                  onClick={() => {
-                    logout();
-                    setShowDashboard(false);
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={handleLogout}
                   className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 flex items-center gap-3 transition"
                 >
                   <i className="fa-solid fa-right-from-bracket text-red-400"></i>

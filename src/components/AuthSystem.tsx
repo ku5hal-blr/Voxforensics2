@@ -195,6 +195,32 @@ function firebaseUserToProfile(
   };
 }
 
+function getSession2FA(uid: string): boolean {
+  try {
+    return sessionStorage.getItem(`voxforensics_2fa_${uid}`) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setSession2FA(uid: string): void {
+  try {
+    sessionStorage.setItem(`voxforensics_2fa_${uid}`, 'true');
+  } catch (e) {
+    console.warn('Could not save 2FA to sessionStorage:', e);
+  }
+}
+
+function clearSession2FA(uid?: string): void {
+  try {
+    if (uid) {
+      sessionStorage.removeItem(`voxforensics_2fa_${uid}`);
+    }
+  } catch (e) {
+    console.warn('Could not clear 2FA from sessionStorage:', e);
+  }
+}
+
 /* ============================================================
  * AUTH PROVIDER
  * ============================================================ */
@@ -350,28 +376,25 @@ export function AuthProvider({
             }
 
             /*
-             * Regular users require verified email.
+             * Regular user MFA / Session verification check:
+             * Check both the in-memory ref (active login flow) and sessionStorage
+             * (session-scoped key `voxforensics_2fa_${firebaseUser.uid}`) so that
+             * valid authenticated sessions survive page refreshes without bypassing 2FA.
              */
-            if (!firebaseUser.emailVerified) {
-              setCurrentUser(null);
-              setAuthLoading(false);
-              return;
-            }
+            const hasSession2fa = getSession2FA(firebaseUser.uid);
+            const isOtpVerified =
+              otpVerifiedForCurrentLoginRef.current || hasSession2fa;
 
-            /*
-             * Regular user MFA verification check:
-             * Do not use twoFactorEnabled === true as proof that the CURRENT login
-             * has completed MFA. It only means the account REQUIRES MFA.
-             */
             if (profile.twoFactorEnabled) {
-              if (otpVerifiedForCurrentLoginRef.current) {
+              if (isOtpVerified) {
+                otpVerifiedForCurrentLoginRef.current = true;
                 setCurrentUser(profile);
                 setAuthLoading(false);
                 return;
               }
 
-              // 2FA required but not verified for current login attempt:
-              // Do not auto-log in to dashboard.
+              // 2FA required but not verified for current session:
+              // Do not auto-log in unverified sessions.
               setCurrentUser(null);
               setAuthLoading(false);
               return;
@@ -379,7 +402,14 @@ export function AuthProvider({
 
             /*
              * Regular user without 2FA enabled:
+             * Ensure email verification is respected if 2FA was not used.
              */
+            if (!firebaseUser.emailVerified && !isOtpVerified) {
+              setCurrentUser(null);
+              setAuthLoading(false);
+              return;
+            }
+
             setCurrentUser(profile);
           } catch (error) {
             console.error(
@@ -409,6 +439,7 @@ export function AuthProvider({
       if (mfaVerified) {
         otpVerifiedForCurrentLoginRef.current =
           true;
+        setSession2FA(firebaseUser.uid);
       }
 
       const profile =
@@ -423,7 +454,8 @@ export function AuthProvider({
 
       if (
         profile.role !== 'admin' &&
-        !firebaseUser.emailVerified
+        !firebaseUser.emailVerified &&
+        !mfaVerified
       ) {
         return false;
       }
@@ -485,8 +517,10 @@ export function AuthProvider({
 
       if (!cred.user.emailVerified) {
         const snap = await getDoc(doc(db, 'users', cred.user.uid)).catch(() => null);
+        const userData = snap?.data();
         if (
-          snap?.data()?.role !== 'admin' &&
+          userData?.role !== 'admin' &&
+          !userData?.twoFactorEnabled &&
           cred.user.email?.toLowerCase() !== 'admin@voxforensics.com'
         ) {
           throw new Error('auth/unverified-email');
@@ -597,6 +631,8 @@ export function AuthProvider({
   function logout() {
     otpVerifiedForCurrentLoginRef.current =
       false;
+
+    clearSession2FA(auth.currentUser?.uid || currentUser?.id);
 
     signOut(auth).catch((error) => {
       console.error(
@@ -892,15 +928,7 @@ export default function AuthSystem() {
         await fbUser.reload();
         const refreshedUser = auth.currentUser || fbUser;
 
-        // Step A: Check email verification
-        if (!refreshedUser.emailVerified) {
-          updatePendingFirebaseUser(refreshedUser);
-          setStep('verify-email');
-          setMessage('Please verify your email before continuing.');
-          return;
-        }
-
-        // Step B: Check admin role
+        // Step A: Check user profile
         const snap = await getDoc(doc(db, 'users', refreshedUser.uid)).catch(() => null);
         const userData = snap?.data();
         const isAdmin =
@@ -912,7 +940,7 @@ export default function AuthSystem() {
           return;
         }
 
-        // Step C: Regular user profile check for twoFactorEnabled
+        // Step B: Regular user profile check for twoFactorEnabled
         const isTwoFactorEnabled = Boolean(userData?.twoFactorEnabled);
 
         if (isTwoFactorEnabled) {
@@ -933,6 +961,14 @@ export default function AuthSystem() {
           setStep('email-otp');
           setOtp('');
           setMessage(`A 6-digit verification code has been sent to ${targetEmail}.`);
+          return;
+        }
+
+        // Step C: Regular user without MFA enabled requires email verification
+        if (!refreshedUser.emailVerified) {
+          updatePendingFirebaseUser(refreshedUser);
+          setStep('verify-email');
+          setMessage('Please verify your email before continuing.');
           return;
         }
 
