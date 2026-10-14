@@ -765,8 +765,16 @@ function AppContent() {
       !previousUserRef.current &&
       user
     ) {
-      if (showAuthModal || user.role === 'admin') {
+      if (user.role === 'admin') {
         setShowDashboard(true);
+      } else if (showAuthModal) {
+        setShowDashboard(false);
+        setActiveTab('home');
+        try {
+          localStorage.setItem('vox_active_tab', 'home');
+        } catch (e) {
+          console.warn('Could not save vox_active_tab to localStorage:', e);
+        }
       }
     }
 
