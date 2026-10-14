@@ -320,6 +320,35 @@ function AppContent() {
   const [showLoginRequiredModal, setShowLoginRequiredModal] =
     useState(false);
 
+  /*
+   * Notification / Toast message
+   */
+  const [toastMessage, setToastMessage] =
+    useState<string | null>(null);
+
+  const toastTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string, durationMs: number = 3000) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimeoutRef.current = null;
+    }, durationMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const mediaRecorderRef =
     useRef<MediaRecorder | null>(null);
 
@@ -665,11 +694,18 @@ function AppContent() {
     }
   }, [stopAudioPlayback]);
 
+  const logoutToastShownRef = useRef<boolean>(false);
+
   /*
    * Centralized Logout Handler:
-   * Clears temporary scanner data, clears auth session, resets active tab to 'home', closes dashboards/drawers
+   * Clears temporary scanner data, clears auth session, resets active tab to 'home', closes dashboards/drawers,
+   * and displays a professional logout confirmation toast.
    */
   const handleLogout = useCallback(() => {
+    if (!user) {
+      return;
+    }
+
     clearTemporaryScannerData();
     logout();
     setActiveTab('home');
@@ -680,21 +716,33 @@ function AppContent() {
     }
     setShowDashboard(false);
     setMobileMenuOpen(false);
-  }, [clearTemporaryScannerData, logout]);
+
+    if (!logoutToastShownRef.current) {
+      logoutToastShownRef.current = true;
+      showToast('Logged out successfully.');
+    }
+  }, [user, clearTemporaryScannerData, logout, showToast]);
 
   /*
    * Teardown guard:
    * Whenever an authenticated user transitions to unauthenticated (logout/session end),
-   * ensure temporary scanner data and audio session contents are completely purged.
+   * ensure temporary scanner data and audio session contents are completely purged,
+   * and display logout confirmation if not already triggered by handleLogout.
    */
   const previousUserForScannerRef = useRef<User | null>(user);
 
   useEffect(() => {
     if (previousUserForScannerRef.current && !user) {
       clearTemporaryScannerData();
+      if (!logoutToastShownRef.current) {
+        logoutToastShownRef.current = true;
+        showToast('Logged out successfully.');
+      }
+    } else if (user) {
+      logoutToastShownRef.current = false;
     }
     previousUserForScannerRef.current = user;
-  }, [user, clearTemporaryScannerData]);
+  }, [user, clearTemporaryScannerData, showToast]);
 
   /*
    * ------------------------------------------------------------
@@ -3226,6 +3274,40 @@ function AppContent() {
     <div className="min-h-screen relative">
 
       <LiveBackground />
+
+      {/* ================================================== */}
+      {/* NOTIFICATION TOAST */}
+      {/* ================================================== */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-20 right-4 sm:right-6 z-[100] max-w-sm w-auto fade-in pointer-events-auto"
+        >
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#090f22]/95 border border-[#00d4ff]/40 shadow-[0_10px_35px_rgba(2,5,12,0.8),0_0_15px_rgba(0,212,255,0.2)] backdrop-blur-md text-white text-sm">
+            <div className="w-7 h-7 rounded-full bg-[#00ff88]/15 border border-[#00ff88]/40 flex items-center justify-center flex-shrink-0">
+              <i className="fa-solid fa-circle-check text-[#00ff88] text-sm"></i>
+            </div>
+            <p className="font-medium text-gray-200 pr-1 select-none">
+              {toastMessage}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (toastTimeoutRef.current) {
+                  clearTimeout(toastTimeoutRef.current);
+                  toastTimeoutRef.current = null;
+                }
+                setToastMessage(null);
+              }}
+              className="ml-auto w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition"
+              aria-label="Close notification"
+            >
+              <i className="fa-solid fa-xmark text-xs"></i>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ================================================== */}
       {/* NAVIGATION */}
