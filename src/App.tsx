@@ -187,21 +187,7 @@ function AppContent() {
     localStorage.setItem('vox_active_tab', activeTab);
   }, [activeTab]);
 
-  /*
-   * Centralized Logout Handler:
-   * Clears auth session, resets active tab to 'home', closes dashboards/drawers
-   */
-  const handleLogout = useCallback(() => {
-    logout();
-    setActiveTab('home');
-    try {
-      localStorage.setItem('vox_active_tab', 'home');
-    } catch (e) {
-      console.warn('Could not save vox_active_tab to localStorage:', e);
-    }
-    setShowDashboard(false);
-    setMobileMenuOpen(false);
-  }, [logout]);
+
 
   /*
    * Protected page guard:
@@ -378,6 +364,9 @@ function AppContent() {
   const dropZoneRef =
     useRef<HTMLDivElement>(null);
 
+  const activeScanIdRef =
+    useRef<number>(0);
+
   /*
    * ------------------------------------------------------------
    * AUDIO PREVIEW URL
@@ -520,6 +509,192 @@ function AppContent() {
       );
     };
   }, [audioPreviewUrl]);
+
+  /*
+   * ------------------------------------------------------------
+   * CLEAR TEMPORARY SCANNER DATA ON LOGOUT
+   * ------------------------------------------------------------
+   * Clears all session-specific scanner and audio contents:
+   * - Uploaded audio files & file inputs
+   * - Recorded microphone audio, recording blobs, active streams & timers
+   * - Audio playback, object URLs, & preview state
+   * - Waveform & spectrogram visualization data & canvas contexts
+   * - Acoustic features, verdicts, confidence scores, & ML results
+   * - Loading, recording, & analysis flags
+   */
+  const clearTemporaryScannerData = useCallback(() => {
+    // Invalidate any in-flight analysis requests
+    activeScanIdRef.current++;
+
+    // 1. Stop audio playback and reset audio element
+    stopAudioPlayback();
+
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+      audioPreviewRef.current.currentTime = 0;
+      audioPreviewRef.current.removeAttribute('src');
+      audioPreviewRef.current.load();
+    }
+
+    // 2. Revoke temporary object URLs to prevent memory leaks
+    if (audioObjectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+      } catch (e) {
+        console.warn('Could not revoke audioObjectUrl:', e);
+      }
+      audioObjectUrlRef.current = null;
+    }
+
+    setAudioPreviewUrl((prevUrl) => {
+      if (prevUrl && prevUrl.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(prevUrl);
+        } catch (e) {
+          console.warn('Could not revoke audioPreviewUrl:', e);
+        }
+      }
+      return null;
+    });
+
+    setIsPlaying(false);
+
+    // 3. Abort and clean up any in-progress recording session
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.ondataavailable = null;
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.onerror = null;
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (e) {
+        console.warn('Error stopping mediaRecorder during logout:', e);
+      }
+      mediaRecorderRef.current = null;
+    }
+
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      } catch (e) {
+        console.warn('Error stopping stream tracks during logout:', e);
+      }
+      streamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch (e) {
+        console.warn('Error closing audioContext during logout:', e);
+      }
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+    audioChunksRef.current = [];
+
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = 0;
+    }
+
+    if (simAnimRef.current) {
+      cancelAnimationFrame(simAnimRef.current);
+      simAnimRef.current = 0;
+    }
+
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = undefined;
+    }
+
+    setIsRecording(false);
+    setRecordingTime(0);
+
+    // 4. Clear audio file selections & input elements
+    setAudioFile(null);
+    setRecordedAudioFile(null);
+
+    if (homeFileInputRef.current) {
+      homeFileInputRef.current.value = '';
+    }
+    if (scannerFileInputRef.current) {
+      scannerFileInputRef.current.value = '';
+    }
+
+    // 5. Clear waveform & spectrogram visualization data & canvas contexts
+    setWaveformData([]);
+    setSpectrogramData([]);
+
+    try {
+      if (canvasWaveformRef.current) {
+        const ctx = canvasWaveformRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasWaveformRef.current.width, canvasWaveformRef.current.height);
+        }
+      }
+      if (canvasSpectrogramRef.current) {
+        const ctx = canvasSpectrogramRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasSpectrogramRef.current.width, canvasSpectrogramRef.current.height);
+        }
+      }
+      if (simulatedCanvasRef.current) {
+        const ctx = simulatedCanvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, simulatedCanvasRef.current.width, simulatedCanvasRef.current.height);
+        }
+      }
+    } catch (e) {
+      console.warn('Error clearing visualizer canvases during logout:', e);
+    }
+
+    // 6. Clear current scan results, verdict, confidence, explainability & features
+    setCurrentResult(null);
+    setIsAnalyzing(false);
+
+    // 7. Clear any temporary scanner values from sessionStorage
+    try {
+      sessionStorage.removeItem('vox_temp_scan');
+      sessionStorage.removeItem('vox_temp_audio');
+      sessionStorage.removeItem('vox_scanner_state');
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }, [stopAudioPlayback]);
+
+  /*
+   * Centralized Logout Handler:
+   * Clears temporary scanner data, clears auth session, resets active tab to 'home', closes dashboards/drawers
+   */
+  const handleLogout = useCallback(() => {
+    clearTemporaryScannerData();
+    logout();
+    setActiveTab('home');
+    try {
+      localStorage.setItem('vox_active_tab', 'home');
+    } catch (e) {
+      console.warn('Could not save vox_active_tab to localStorage:', e);
+    }
+    setShowDashboard(false);
+    setMobileMenuOpen(false);
+  }, [clearTemporaryScannerData, logout]);
+
+  /*
+   * Teardown guard:
+   * Whenever an authenticated user transitions to unauthenticated (logout/session end),
+   * ensure temporary scanner data and audio session contents are completely purged.
+   */
+  const previousUserForScannerRef = useRef<User | null>(user);
+
+  useEffect(() => {
+    if (previousUserForScannerRef.current && !user) {
+      clearTemporaryScannerData();
+    }
+    previousUserForScannerRef.current = user;
+  }, [user, clearTemporaryScannerData]);
 
   /*
    * ------------------------------------------------------------
@@ -934,6 +1109,8 @@ function AppContent() {
         /*
          * Reset current scan state.
          */
+
+        const scanId = ++activeScanIdRef.current;
 
         setIsAnalyzing(true);
 
@@ -1665,6 +1842,10 @@ function AppContent() {
            * ======================================================
            */
 
+          if (scanId !== activeScanIdRef.current) {
+            return;
+          }
+
           setCurrentResult(
             result
           );
@@ -1756,6 +1937,10 @@ function AppContent() {
                 forceResult
               );
 
+            if (scanId !== activeScanIdRef.current) {
+              return;
+            }
+
             setCurrentResult(
               result
             );
@@ -1831,6 +2016,10 @@ function AppContent() {
                 'The machine learning analysis could not be completed. Please make sure the VoxForensics ML backend is running and the audio file is supported.',
             };
 
+            if (scanId !== activeScanIdRef.current) {
+              return;
+            }
+
             setCurrentResult(
               errorResult
             );
@@ -1850,7 +2039,9 @@ function AppContent() {
            * Always stop the loading indicator.
            */
 
-          setIsAnalyzing(false);
+          if (scanId === activeScanIdRef.current) {
+            setIsAnalyzing(false);
+          }
 
           /*
            * Safety cleanup for AudioContext.
